@@ -4,7 +4,7 @@
 door opener, switches and quick replies. Several devices form one call: one leads, the others can watch along,
 be brought in or locked out.
 
-[Deutsch](README.de.md)
+[Deutsch](README.de.md) · **[Step-by-step guide](docs/GUIDE.md)**
 
 ## What it does
 

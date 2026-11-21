@@ -67,7 +67,8 @@ class DoorCallPanel extends HTMLElement {
       hr { border:0; border-top:1px solid var(--divider-color); margin:12px 0; }
     </style>
     <div class="dc">
-      <div class="kopf"><ha-icon icon="mdi:doorbell-video"></ha-icon><h1>DoorCall Intercom</h1></div>
+      <div class="kopf"><ha-icon icon="mdi:doorbell-video"></ha-icon><h1>DoorCall Intercom</h1><span style="flex:1"></span>
+        <a href="https://github.com/Aggro600/DoorCall-Intercom/blob/main/docs/ANLEITUNG.md" target="_blank" rel="noopener" style="color:var(--primary-color);text-decoration:none;display:inline-flex;align-items:center;gap:6px"><ha-icon icon="mdi:book-open-variant"></ha-icon>Anleitung</a></div>
       <div class="note" style="margin-bottom:12px">Klingeln an der Tür kommt als echter Anruf auf Handys und Tablets (App „Türklingel“ und Home-Assistant-App nötig).
         Nach dem Annehmen: Live-Bild, Gegensprechen über go2rtc, Tür öffnen, Schalter und Ansagen. Mehrere Geräte bilden eine Gesprächsrunde.</div>
       ${this.msg ? `<div class="msg ${this.msgErr ? "err" : ""}">${esc(this.msg)}</div>` : ""}

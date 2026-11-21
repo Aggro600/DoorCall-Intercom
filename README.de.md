@@ -4,7 +4,7 @@
 Türöffner, Schaltern und Schnellantworten. Mehrere Geräte bilden ein Gespräch: einer leitet, die anderen schauen
 mit, werden dazugeholt oder ausgesperrt.
 
-[English](README.md)
+[English](README.md) · **[Anleitung Schritt für Schritt](docs/ANLEITUNG.md)**
 
 ## Was es kann
 
