@@ -1,0 +1,11 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DoorCall Intercom",
+        "description": "Doorbell rings become real calls on phones and tablets (app \"Türklingel\"). After setup, open \"DoorCall\" in the sidebar to set up doorbells, devices and groups."
+      }
+    },
+    "abort": {"single_instance_allowed": "DoorCall Intercom is already set up."}
+  }
+}

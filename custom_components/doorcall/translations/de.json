@@ -1,0 +1,11 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "DoorCall Intercom",
+        "description": "Klingeln an der Tür kommt als echter Anruf auf Handys und Tablets (App „Türklingel“). Nach der Einrichtung in der Seitenleiste „DoorCall“ öffnen und Klingeln, Geräte und Gruppen einstellen."
+      }
+    },
+    "abort": {"single_instance_allowed": "DoorCall Intercom ist schon eingerichtet."}
+  }
+}

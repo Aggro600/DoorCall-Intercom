@@ -1,0 +1,208 @@
+// DoorCall Intercom - Seite in der Seitenleiste (2026-11-21): Klingeln, Geräte, Gruppen, Gesprächsrunde, Sprechen.
+// Speichert jede Änderung sofort (doorcall/save bzw. doorcall/gruppen).
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const AUSLOESER = ["binary_sensor", "input_boolean", "switch", "button", "input_button", "event"];
+const TUEREN = ["switch", "button", "input_button", "lock", "script", "input_boolean"];
+const LISTEN = {
+  aktionen: ["Eigene Knöpfe im Anruf (z. B. Licht Treppenhaus)", 3, ["switch", "button", "input_button", "lock", "script", "input_boolean", "light", "scene"], 16],
+  schalter: ["Schalter mit Status im Anruf, antippen schaltet um (z. B. „Nach Klingeln immer öffnen“)", 4, ["input_boolean", "switch", "light", "fan"], 20],
+  anzeigen: ["Anzeigen im Anruf (z. B. Schloss, Türkontakt)", 3, null, 20],
+};
+const LEER = () => ({ geraete: [], gruppen: [], go2rtc: "", src: "", dauer: 30, oeffnen: "", oeffnen_frei: false, mitschauen: true,
+  gaeste_bedienen: true, sprechen: "einer", antwort: "", antwort_oeffnen_s: 8, aktionen: [], schalter: [], anzeigen: [] });
+
+class DoorCallPanel extends HTMLElement {
+  set hass(h) { const erst = !this._hass; this._hass = h; if (erst) this._laden(); }
+  set narrow(n) { this._narrow = n; }
+
+  async _laden() {
+    this.innerHTML = `<div style="padding:24px">Lade DoorCall …</div>`;
+    try {
+      const [d, info] = await Promise.all([this._hass.callWS({ type: "doorcall/get" }), this._hass.callWS({ type: "doorcall/info" })]);
+      this.d = d; this.info = info; this.msg = d.uebernommen ? "Einstellungen wurden aus ESPHomeRemote übernommen." : "";
+    } catch (e) { this.innerHTML = `<div style="padding:24px">DoorCall nicht erreichbar: ${esc(e.message || e)}</div>`; return; }
+    if (!this._an) {
+      this._an = true;
+      this.addEventListener("change", (e) => this._aenderung(e));
+      this.addEventListener("click", (e) => this._klick(e));
+    }
+    this._zeigen();
+  }
+
+  _name(e) { return this._hass.states[e]?.attributes.friendly_name || e; }
+  _gname(g) { return (this.info.namen || {})[g] || g.replace(/^mobile_app_/, "").split("_").map((w) => w[0]?.toUpperCase() + w.slice(1)).join(" "); }
+  _ents(doms, wert) {
+    const e = Object.keys(this._hass.states).filter((x) => !doms || doms.includes(x.split(".")[0])).sort((a, b) => this._name(a).localeCompare(this._name(b), "de"));
+    if (wert && !e.includes(wert)) e.unshift(wert);
+    return e;
+  }
+  _sel(attr, wert, doms, leer = "— wählen —") {
+    return `<select ${attr}><option value="">${esc(leer)}</option>${this._ents(doms, wert).map((x) => `<option value="${esc(x)}" ${x === wert ? "selected" : ""}>${esc(this._name(x))}</option>`).join("")}</select>`;
+  }
+
+  _zeigen() {
+    const k = this.d.klingeln, grs = this.info.gruppen || [];
+    const geraete = [...new Set([...(this.info.geraete || []), ...k.flatMap((x) => x.anruf?.geraete || [])])];
+    this.innerHTML = `<style>
+      :host, doorcall-panel { display:block; }
+      .dc { padding:16px; max-width:1000px; margin:0 auto; color:var(--primary-text-color); font-family:var(--paper-font-body1_-_font-family, sans-serif); }
+      .kopf { display:flex; align-items:center; gap:12px; margin:4px 0 12px; }
+      .kopf h1 { font-size:24px; margin:0; font-weight:500; }
+      .karte { background:var(--card-background-color); border-radius:12px; padding:16px; margin:0 0 16px; box-shadow:var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
+      .karte h2 { font-size:18px; margin:0 0 8px; font-weight:500; display:flex; align-items:center; gap:8px; }
+      .zeile { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin:8px 0; }
+      label { display:inline-flex; align-items:center; gap:6px; }
+      .note { color:var(--secondary-text-color); font-size:13px; line-height:1.4; }
+      .erkl { background:var(--secondary-background-color); border-radius:8px; padding:8px 12px; margin:6px 0; }
+      input, select { background:var(--input-fill-color, var(--secondary-background-color)); color:var(--primary-text-color); border:1px solid var(--divider-color); border-radius:6px; padding:6px 8px; font-size:14px; max-width:100%; }
+      input[type=checkbox] { width:18px; height:18px; }
+      button { background:var(--primary-color); color:var(--text-primary-color, #fff); border:0; border-radius:8px; padding:8px 14px; font-size:14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+      button.ghost { background:transparent; color:var(--primary-color); border:1px solid var(--divider-color); }
+      button.rot { background:transparent; color:var(--error-color); border:1px solid var(--divider-color); }
+      button:disabled { opacity:.4; cursor:default; }
+      .gruppe { border:1px solid var(--divider-color); border-radius:8px; padding:8px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0; }
+      .msg { padding:8px 12px; border-radius:8px; background:var(--secondary-background-color); margin-bottom:12px; }
+      .msg.err { color:var(--error-color); }
+      hr { border:0; border-top:1px solid var(--divider-color); margin:12px 0; }
+    </style>
+    <div class="dc">
+      <div class="kopf"><ha-icon icon="mdi:doorbell-video"></ha-icon><h1>DoorCall Intercom</h1></div>
+      <div class="note" style="margin-bottom:12px">Klingeln an der Tür kommt als echter Anruf auf Handys und Tablets (App „Türklingel“ und Home-Assistant-App nötig).
+        Nach dem Annehmen: Live-Bild, Gegensprechen über go2rtc, Tür öffnen, Schalter und Ansagen. Mehrere Geräte bilden eine Gesprächsrunde.</div>
+      ${this.msg ? `<div class="msg ${this.msgErr ? "err" : ""}">${esc(this.msg)}</div>` : ""}
+      ${k.map((x, ki) => this._klingel(x, ki, geraete, grs)).join("")}
+      ${k.length < 8 ? `<button class="ghost" data-a="add"><ha-icon icon="mdi:plus"></ha-icon>Klingel hinzufügen</button>` : ""}
+      <div class="karte" style="margin-top:16px"><h2><ha-icon icon="mdi:account-group"></ha-icon>Gruppen</h2>
+        <div class="note">Gruppen gelten für alle Klingeln. Eine Klingel kann eine Gruppe anrufen; im Gespräch kann die Leitung Gruppen „dazuholen“.</div>
+        ${grs.map((g, gi) => `<div class="gruppe">
+          <input data-gr="name" data-gi="${gi}" value="${esc(g.name || "")}" maxlength="24" placeholder="Name, z. B. Handys" style="width:140px">
+          ${geraete.map((d) => `<label><input type="checkbox" data-gr="geraet" data-gi="${gi}" data-g="${esc(d)}" ${(g.geraete || []).includes(d) ? "checked" : ""}>${esc(this._gname(d))}</label>`).join("")}
+          <button class="rot" data-a="gr_del" data-gi="${gi}" title="Gruppe löschen"><ha-icon icon="mdi:close"></ha-icon></button></div>`).join("")}
+        ${grs.length < 12 ? `<button class="ghost" data-a="gr_add"><ha-icon icon="mdi:plus"></ha-icon>Gruppe</button>` : ""}
+      </div>
+    </div>`;
+  }
+
+  _klingel(k, ki, geraete, grs) {
+    const a = k.anruf || LEER();
+    const lst = (key) => { const [titel, max, doms, nmax] = LISTEN[key], l = a[key] || [];
+      return `<div class="zeile"><span class="note" style="width:100%">${esc(titel)} – bis ${max}:</span>
+        ${l.map((x, ai) => `<span style="display:inline-flex;gap:6px;align-items:center"><input data-li="${key}" data-f="name" data-ki="${ki}" data-ai="${ai}" value="${esc(x.name || "")}" maxlength="${nmax}" placeholder="Name" style="width:120px">
+          ${this._sel(`data-li="${key}" data-f="entity" data-ki="${ki}" data-ai="${ai}"`, x.entity, doms)}
+          <button class="rot" data-a="li_del" data-li="${key}" data-ki="${ki}" data-ai="${ai}" title="Entfernen"><ha-icon icon="mdi:close"></ha-icon></button></span>`).join("")}
+        ${l.length < max ? `<button class="ghost" data-a="li_add" data-li="${key}" data-ki="${ki}"><ha-icon icon="mdi:plus"></ha-icon>Hinzufügen</button>` : ""}</div>`; };
+    const gem = a.sprechen === "gemischt";
+    return `<div class="karte"><h2><ha-icon icon="mdi:doorbell"></ha-icon>
+        <input data-k="name" data-ki="${ki}" value="${esc(k.name)}" maxlength="30" style="font-size:16px;width:200px">
+        <span style="flex:1"></span><button class="rot" data-a="del" data-ki="${ki}" title="Klingel löschen"><ha-icon icon="mdi:delete-outline"></ha-icon></button></h2>
+      <div class="zeile">
+        <label title="Wenn dieser Zustand auf „an“ geht (bei Knopf/Ereignis: bei jeder Änderung), wird angerufen">Auslöser ${this._sel(`data-k="ausloeser" data-ki="${ki}"`, k.ausloeser, AUSLOESER, "— keiner —")}</label>
+        <label title="Für das Anruferbild und das Foto bei „verpasst“">Kamera ${this._sel(`data-k="kamera" data-ki="${ki}"`, k.kamera, ["camera"], "— keine —")}</label>
+      </div>
+      <hr><div class="note">Geräte, die klingeln (Home-Assistant-App + App „Türklingel“):</div>
+      <div class="zeile">${geraete.length ? geraete.map((g) => `<label><input type="checkbox" data-a2="geraet" data-ki="${ki}" data-g="${esc(g)}" ${(a.geraete || []).includes(g) ? "checked" : ""}>${esc(this._gname(g))}</label>`).join("")
+        : `<span class="note">Kein Gerät mit Home-Assistant-App gefunden.</span>`}</div>
+      ${grs.filter((g) => g.name).length ? `<div class="zeile"><span class="note">Gruppen:</span>${grs.filter((g) => g.name).map((g) => `<label><input type="checkbox" data-a2="gruppe" data-ki="${ki}" data-g="${esc(g.name)}" ${(a.gruppen || []).includes(g.name) ? "checked" : ""}>${esc(g.name)} <span class="note">(${(g.geraete || []).map((d) => esc(this._gname(d))).join(", ") || "leer"})</span></label>`).join("")}</div>` : ""}
+      <div class="zeile">
+        <label title="Adresse von go2rtc (z. B. aus Frigate)">go2rtc <input data-a2="go2rtc" data-ki="${ki}" value="${esc(a.go2rtc || "")}" placeholder="${esc(this.info.go2rtc || "http://…:1984")}" style="width:210px"></label>
+        <label title="Name des Streams in go2rtc">Stream <input data-a2="src" data-ki="${ki}" value="${esc(a.src || "")}" placeholder="z. B. haustur" style="width:120px"></label>
+        <label>Klingeln <input type="number" data-a2="dauer" data-ki="${ki}" min="10" max="120" value="${a.dauer || 30}" style="width:64px"> s</label>
+      </div>
+      <hr><div class="note">Gesprächsrunde</div>
+      <div class="zeile">
+        <label title="Wer zuerst annimmt, leitet. Die anderen Geräte können als Gast mitschauen; die Leitung kann das sperren und Geräte dazuholen."><input type="checkbox" data-a2="mitschauen" data-ki="${ki}" ${a.mitschauen !== false ? "checked" : ""}>Mitschauen auf den anderen Geräten erlauben</label>
+        <label title="Sonst darf nur die Leitung Tür öffnen, Schalter, Ansagen und eigene Knöpfe benutzen"><input type="checkbox" data-a2="gaeste_bedienen" data-ki="${ki}" ${a.gaeste_bedienen !== false ? "checked" : ""}>Gäste dürfen bedienen (Tür, Schalter, Ansagen)</label>
+      </div>
+      <div class="zeile"><label>Sprechen mehrerer Geräte <select data-a2="sprechen" data-ki="${ki}">
+          <option value="einer" ${!gem ? "selected" : ""}>Schnell – immer nur einer spricht</option>
+          <option value="gemischt" ${gem ? "selected" : ""}>Gemischt – alle gleichzeitig (mit Verzögerung)</option></select></label></div>
+      <div class="note erkl">${gem
+        ? "<b>Gemischt:</b> Jedes Gerät schickt sein Mikrofon an Home Assistant, HA mischt alle Stimmen und go2rtc spielt das Ergebnis an der Tür ab. Mehrere können gleichzeitig reden, die Stimme kommt aber etwa 0,3–0,8 s später draußen an (Puffer und Umwandlung). Bild und Ton von draußen sind nicht verzögert."
+        : "<b>Schnell:</b> Das Mikrofon geht direkt per WebRTC an die Tür – kaum Verzögerung. Macht jemand anderes sein Mikrofon an, wird das vorige automatisch stumm (zwei Mikrofone direkt würden sich draußen zerhacken)."}
+        Die Leitung kann im Gespräch umstellen und einzelne Mikrofone sperren.</div>
+      <hr><div class="note">Tür und Bedienung im Anruf</div>
+      <div class="zeile">
+        <label title="Wird im Anruf mit „Tür öffnen“ (zweimal tippen) geschaltet">Tür öffnen mit ${this._sel(`data-a2="oeffnen" data-ki="${ki}"`, a.oeffnen, TUEREN, "— nicht —")}</label>
+        ${a.oeffnen ? `<label><input type="checkbox" data-a2="oeffnen_frei" data-ki="${ki}" ${a.oeffnen_frei ? "checked" : ""}>Knopf „Tür öffnen“ im Anruf freigeben</label>` : ""}
+      </div>
+      <div class="zeile">
+        <label title="Auswahl, die beim Wählen eine Ansage abspielt (z. B. Reolink „Schnellantwort-Nachricht abspielen“)">Schnellantworten ${this._sel(`data-a2="antwort" data-ki="${ki}"`, a.antwort, ["select", "input_select"], "— keine —")}</label>
+        ${a.antwort && a.oeffnen ? `<label title="Wenn in der App „danach Tür öffnen“ angehakt ist">Tür öffnen nach Ansage <input type="number" data-a2="antwort_oeffnen_s" data-ki="${ki}" min="0" max="60" value="${a.antwort_oeffnen_s ?? 8}" style="width:60px"> s</label>` : ""}
+      </div>
+      ${lst("aktionen")}${lst("schalter")}${lst("anzeigen")}
+      <div class="zeile"><button data-a="test" data-ki="${ki}" ${((a.geraete || []).length || (a.gruppen || []).length) && a.src ? "" : "disabled"}><ha-icon icon="mdi:phone-ring-outline"></ha-icon>Probeanruf</button>
+        <span class="note">klingelt auf allen eingestellten Geräten</span></div>
+    </div>`;
+  }
+
+  _melden(t, err) { this.msg = t; this.msgErr = !!err; this._zeigen(); }
+
+  async _speichern() {
+    try { const r = await this._hass.callWS({ type: "doorcall/save", klingeln: this.d.klingeln }); this.d.klingeln = r.klingeln; this.msg = ""; this.msgErr = false; }
+    catch (e) { this.msg = "Nicht gespeichert: " + (e.message || e); this.msgErr = true; }
+    this._zeigen();
+  }
+
+  async _gruppenSpeichern() {
+    try { const r = await this._hass.callWS({ type: "doorcall/gruppen", gruppen: (this.info.gruppen || []).filter((g) => g.name) });
+      this.info.gruppen = [...r.gruppen, ...(this.info.gruppen || []).filter((g) => !g.name)]; }
+    catch (e) { this.msg = "Gruppen: " + (e.message || e); this.msgErr = true; }
+  }
+
+  async _aenderung(e) {
+    const t = e.target, ki = Number(t.dataset.ki), k = this.d.klingeln[ki];
+    if (t.dataset.k) { k[t.dataset.k] = t.value.trim(); return this._speichern(); }
+    if (t.dataset.gr) {
+      const gr = (this.info.gruppen || [])[Number(t.dataset.gi)]; if (!gr) return;
+      if (t.dataset.gr === "name") { const alt = gr.name; gr.name = t.value.trim().slice(0, 24);
+        for (const x of this.d.klingeln) if (x.anruf?.gruppen) x.anruf.gruppen = x.anruf.gruppen.map((n) => n === alt ? gr.name : n);
+        await this._gruppenSpeichern(); return this._speichern(); }
+      gr.geraete = (gr.geraete || []).filter((x) => x !== t.dataset.g); if (t.checked) gr.geraete.push(t.dataset.g);
+      await this._gruppenSpeichern(); return this._zeigen();
+    }
+    if (!k) return;
+    const a = (k.anruf ||= LEER());
+    if (t.dataset.li) {
+      const x = (a[t.dataset.li] ||= [])[Number(t.dataset.ai)]; if (!x) return;
+      const nmax = LISTEN[t.dataset.li][3];
+      if (t.dataset.f === "name") x.name = t.value.trim().slice(0, nmax);
+      else { x.entity = t.value; if (!x.name && t.value) x.name = this._name(t.value).slice(0, nmax); }
+      if (!x.entity) return this._zeigen();
+      return this._speichern();
+    }
+    const f = t.dataset.a2; if (!f) return;
+    if (f === "geraet" || f === "gruppe") { const key = f === "geraet" ? "geraete" : "gruppen";
+      a[key] = (a[key] || []).filter((x) => x !== t.dataset.g); if (t.checked) a[key].push(t.dataset.g); }
+    else if (f === "oeffnen_frei") {
+      if (t.checked && !confirm("„Tür öffnen“ im Anruf freigeben? Wer den Anruf angenommen hat – oder bei wem es gerade klingelt –, kann dann die Tür öffnen (zweimal tippen).")) { t.checked = false; return; }
+      a.oeffnen_frei = t.checked;
+    } else if (f === "mitschauen" || f === "gaeste_bedienen") a[f] = t.checked;
+    else if (f === "dauer") a.dauer = Math.max(10, Math.min(120, Number(t.value) || 30));
+    else if (f === "antwort_oeffnen_s") a.antwort_oeffnen_s = Math.max(0, Math.min(60, Number(t.value) || 0));
+    else { a[f] = t.value.trim(); if (f === "oeffnen" && !a.oeffnen) a.oeffnen_frei = false; }
+    if (f === "src" && a.src && !a.go2rtc && this.info.go2rtc) a.go2rtc = this.info.go2rtc;
+    return this._speichern();
+  }
+
+  async _klick(e) {
+    const b = e.target.closest("button[data-a]"); if (!b) return;
+    const a = b.dataset.a, ki = Number(b.dataset.ki), k = this.d.klingeln[ki];
+    if (a === "add") { this.d.klingeln.push({ id: "", name: "Tür " + (this.d.klingeln.length + 1), ausloeser: "", kamera: "", anruf: LEER() }); return this._speichern(); }
+    if (a === "del") { if (!confirm(`Klingel „${k.name}“ löschen?`)) return; this.d.klingeln.splice(ki, 1); return this._speichern(); }
+    if (a === "li_add") { (k.anruf ||= LEER())[b.dataset.li] ||= []; k.anruf[b.dataset.li].push({ name: "", entity: "" }); return this._zeigen(); }
+    if (a === "li_del") { k.anruf[b.dataset.li].splice(Number(b.dataset.ai), 1); return this._speichern(); }
+    if (a === "gr_add") { (this.info.gruppen ||= []).push({ name: "", geraete: [] }); return this._zeigen(); }
+    if (a === "gr_del") {
+      const gr = this.info.gruppen[Number(b.dataset.gi)]; if (!gr) return;
+      if (gr.name && !confirm(`Gruppe „${gr.name}“ löschen?`)) return;
+      this.info.gruppen.splice(Number(b.dataset.gi), 1);
+      for (const x of this.d.klingeln) if (x.anruf?.gruppen) x.anruf.gruppen = x.anruf.gruppen.filter((n) => n !== gr.name);
+      await this._gruppenSpeichern(); return this._speichern();
+    }
+    if (a === "test") {
+      try { await this._hass.callWS({ type: "doorcall/test", kid: k.id }); this._melden(`Probeanruf „${k.name}“ geschickt.`); }
+      catch (err) { this._melden("Probeanruf: " + (err.message || err), true); }
+    }
+  }
+}
+customElements.define("doorcall-panel", DoorCallPanel);

@@ -1,0 +1,25 @@
+{
+  "domain": "doorcall",
+  "name": "DoorCall Intercom",
+  "after_dependencies": [
+    "mobile_app",
+    "camera"
+  ],
+  "codeowners": [
+    "@Aggro600"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "webhook",
+    "frontend",
+    "panel_custom"
+  ],
+  "documentation": "https://github.com/Aggro600/DoorCall-Intercom",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/Aggro600/DoorCall-Intercom/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "2026.11.21.1"
+}
