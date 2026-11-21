@@ -635,12 +635,14 @@ public class Gespraech extends Activity {
                 wachHalten(false);
                 h.removeCallbacks(statusHolen);
                 if (!Anruf.endeGrund.isEmpty()) {   // absichtlich beendet: Grund groß zeigen, länger stehen lassen
+                    if (Anruf.haus() && hausMitte != null) hausZeigen("Gespräch beendet", Anruf.endeGrund, GELB, false);
                     status.setText(Anruf.endeGrund);
                     status.setTextColor(GELB);
                     Anruf.endeGrund = "";
                     h.postDelayed(this::finishAndRemoveTask, 4000);
                 } else {
                     status.setText("beendet");
+                    if (Anruf.haus() && hausMitte != null) hausZeigen("Gespräch beendet", "", SCHRIFT, false);
                     h.postDelayed(this::finishAndRemoveTask, 900);
                 }
             }
@@ -680,7 +682,7 @@ public class Gespraech extends Activity {
         if (Anruf.haus()) HausAudio.stumm = stumm;
         js("stumm(" + stumm + ")");
         zustandZeigen();
-        if (!stumm && !mikBereit) hinweis("Verbindung zur Tür baut sich noch auf – gleich hört man dich");
+        if (!stumm && !mikBereit && !Anruf.haus()) hinweis("Verbindung zur Tür baut sich noch auf – gleich hört man dich");
         // Gesprächsrunde: immer nur einer spricht - HA macht mich zum Sprecher, die anderen schalten sich stumm
         if (!stumm) sprechenSeit = System.currentTimeMillis();
         if ("gemischt".equals(modus)) { if (stumm) mikHochStoppen(); else mikHochStarten(); }
@@ -736,7 +738,7 @@ public class Gespraech extends Activity {
         boolean bereit = r.optBoolean("mik_bereit", true);
         if (bereit != mikBereit) {
             mikBereit = bereit;
-            if (bereit && !stumm) hinweis("Jetzt hört man dich an der Tür");
+            if (bereit && !stumm && !Anruf.haus()) hinweis("Jetzt hört man dich an der Tür");
             zustandZeigen();
         }
         String neuModus = r.optString("modus", "einer");

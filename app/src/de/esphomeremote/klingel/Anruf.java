@@ -211,6 +211,10 @@ public final class Anruf {
             } else Log.w(TAG, "Telecom erlaubt gerade keinen Anruf");
         } catch (Exception e) { Log.w(TAG, "Telecom: " + e); }
         if (!ueberTelecom) klingelnZeigen(c);    // ohne Telecom: nur Benachrichtigung
+        if (haus()) {   // Hausruf: Anruffenster gleich zeigen (geht aus dem Hintergrund mit "Über anderen Apps anzeigen")
+            try { c.startActivity(new Intent(c, Gespraech.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
+            catch (Exception e) { Log.i(TAG, "Hausruf-Fenster: " + e); }
+        }
         aktualisieren();
     }
 
