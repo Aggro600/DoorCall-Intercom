@@ -84,6 +84,10 @@ class DoorCallPanel extends HTMLElement {
           ✓ = App verbunden.</div>
         <div class="zeile">${geraete.map((g) => `<label><input type="checkbox" data-fg="geraet" data-g="${esc(g)}" ${fg.modus === "alle" || (fg.geraete || []).includes(g) ? "checked" : ""} ${fg.modus === "alle" ? "disabled" : ""}>${esc(this._gname(g))}${(this.info.verbunden || []).includes(g) ? " ✓" : ""}</label>`).join("")}</div>
         <div class="zeile"><button class="ghost" data-a="suchen" ${fg.modus === "aus" ? "disabled" : ""}><ha-icon icon="mdi:magnify"></ha-icon>Jetzt Geräte suchen</button></div>
+        <hr><div class="note">Ruhe-Zonen</div>
+        <div class="note erkl">Ist ein Gerät in einer seiner Ruhe-Zonen (z. B. auf der Arbeit), klingelt DoorCall dort nicht – weder Haustür noch Hausruf, Dazuholen oder Mitschauen. Entscheidet Home Assistant über den Standort der Home-Assistant-App (device_tracker), unabhängig vom „Nicht stören“ des Handys. Ein Probeanruf an genau dieses Gerät klingelt trotzdem. Tipp: Zonen unter ~150 m Radius erkennt das Handy oft nicht zuverlässig.</div>
+        ${(fg.modus === "alle" ? geraete : (fg.geraete || [])).map((g) => `<div class="zeile"><span style="min-width:150px">${esc(this._gname(g))}</span>
+          ${(this.info.zonen || []).map((z) => `<label><input type="checkbox" data-ruhe="${esc(g)}" data-z="${esc(z.id)}" ${((this.info.ruhe || {})[g] || []).includes(z.id) ? "checked" : ""}>${esc(z.name)}</label>`).join("")}</div>`).join("")}
       </div>
       ${k.map((x, ki) => this._klingel(x, ki, geraete, grs)).join("")}
       ${k.length < 8 ? `<button class="ghost" data-a="add"><ha-icon icon="mdi:plus"></ha-icon>Klingel hinzufügen</button>` : ""}
@@ -168,6 +172,13 @@ class DoorCallPanel extends HTMLElement {
 
   async _aenderung(e) {
     const t = e.target, ki = Number(t.dataset.ki), k = this.d.klingeln[ki];
+    if (t.dataset.ruhe) {   // Ruhe-Zonen je Gerät (doorcall/ruhe)
+      const r = this.info.ruhe ||= {}, g = t.dataset.ruhe;
+      r[g] = (r[g] || []).filter((z) => z !== t.dataset.z); if (t.checked) r[g].push(t.dataset.z);
+      try { this.info.ruhe = (await this._hass.callWS({ type: "doorcall/ruhe", ruhe: r })).ruhe; this.msg = ""; this.msgErr = false; }
+      catch (err) { this.msg = "Ruhe-Zonen: " + (err.message || err); this.msgErr = true; }
+      return this._zeigen();
+    }
     if (t.dataset.fg) {   // Freigabe der Geräte (doorcall/freigabe)
       const fg = this.info.freigabe ||= { modus: "auswahl", geraete: [] };
       if (t.dataset.fg === "modus") fg.modus = t.value;

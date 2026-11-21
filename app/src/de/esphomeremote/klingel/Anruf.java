@@ -234,6 +234,12 @@ public final class Anruf {
         int laut = cfg.optInt("laut", 0);
         if (laut <= 0 || wecker != null) return;
         try {
+            // "Nicht stören" des Handys ist an (z. B. auf der Arbeit): nicht über den Wecker-Kanal durchklingeln
+            int filter = nm(c).getCurrentInterruptionFilter();
+            if (filter != NotificationManager.INTERRUPTION_FILTER_ALL && filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN) {
+                Log.i(TAG, "Nicht stören ist an (" + filter + ") - kein lautes Klingeln");
+                return;
+            }
             android.media.AudioManager am = c.getSystemService(android.media.AudioManager.class);
             int ring = am.getStreamVolume(android.media.AudioManager.STREAM_RING), ringMax = am.getStreamMaxVolume(android.media.AudioManager.STREAM_RING);
             boolean zuLeise = am.getRingerMode() != android.media.AudioManager.RINGER_MODE_NORMAL || ring * 100 < laut * ringMax;

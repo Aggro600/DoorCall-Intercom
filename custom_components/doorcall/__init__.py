@@ -30,7 +30,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.6"
+VERSION_JS = "2026.11.22.7"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -142,7 +142,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ansichten(hass)
     if not hass.data.get(DOMAIN + "_ws"):
         hass.data[DOMAIN + "_ws"] = True
-        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen, ws_freigabe):
+        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen, ws_freigabe, ws_ruhe):
             websocket_api.async_register_command(hass, fn)
     await _panel(hass)
     _einrichten_planen(hass, entry, t)
@@ -249,7 +249,10 @@ def ws_info(hass, connection, msg) -> None:
     geraete = sorted(s for s in hass.services.async_services().get("notify", {}) if s.startswith("mobile_app_"))
     connection.send_result(msg["id"], {"geraete": geraete, "go2rtc": _go2rtc_vorschlag(hass), "namen": t.namen(),
                                        "gruppen": t.gruppen(), "app": t.app_geraete(), "freigabe": t.freigabe(),
-                                       "verbunden": list(t.daten.get("app_geraete") or [])})
+                                       "verbunden": list(t.daten.get("app_geraete") or []),
+                                       "ruhe": t.daten.get("ruhe") or {},
+                                       "zonen": [{"id": z.entity_id, "name": z.attributes.get("friendly_name") or z.entity_id}
+                                                 for z in hass.states.async_all("zone") if z.attributes.get("radius")]})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "doorcall/test", vol.Required("kid"): str,
@@ -289,3 +292,15 @@ async def ws_freigabe(hass, connection, msg) -> None:
     if msg["modus"] == "alle":
         gefragt += await t.einrichten()
     connection.send_result(msg["id"], {"freigabe": t.freigabe(), "gefragt": gefragt})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "doorcall/ruhe", vol.Required("ruhe"): {
+    vol.Match(r"^mobile_app_[a-z0-9_]+$"): [vol.Match(r"^zone\.[a-z0-9_]+$")]}})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_ruhe(hass, connection, msg) -> None:
+    """Ruhe-Zonen je Gerät speichern: dort klingelt DoorCall nicht."""
+    t = _t(hass)
+    t.daten["ruhe"] = {g: list(dict.fromkeys(z))[:8] for g, z in msg["ruhe"].items() if z}
+    await t.store.async_save(t.daten)
+    connection.send_result(msg["id"], {"ruhe": t.daten["ruhe"]})

@@ -196,6 +196,8 @@ class Tuerklingel:
         k = self.klingel(kid)
         a = (k or {}).get("anruf") or {}
         geraete = nur or self.ziele([*(a.get("geraete") or []), *(f"gruppe:{g}" for g in a.get("gruppen") or [])])
+        if not nur:
+            geraete = self.nicht_ruhig(geraete, "Klingeln")
         if not k or not geraete:
             return None
         jetzt = time.time()
@@ -284,6 +286,32 @@ class Tuerklingel:
         f.setdefault("geraete", [])
         return f
 
+    def ruhig(self, g: str) -> str:
+        """Ruhe-Zonen (2026-11-21): ist das Gerät (device_tracker der Home-Assistant-App) in einer seiner Ruhe-Zonen,
+        klingelt DoorCall dort nicht. Rückgabe: Name der Zone oder ""."""
+        zonen = (self.daten.get("ruhe") or {}).get(g) or []
+        if not zonen:
+            return ""
+        st = self.hass.states.get("device_tracker." + g.removeprefix("mobile_app_"))
+        if st is None:
+            return ""
+        for z in zonen:
+            zs = self.hass.states.get(z)
+            name = (zs.attributes.get("friendly_name") if zs else "") or z.split(".")[-1]
+            if st.state in (name, z.split(".")[-1]):
+                return name
+        return ""
+
+    def nicht_ruhig(self, geraete: list[str], wofuer: str) -> list[str]:
+        out = []
+        for g in geraete:
+            if z := self.ruhig(g):
+                _LOGGER.info("DoorCall: %s ist in Ruhe-Zone %s - kein %s", g, z, wofuer)
+                self.hass.bus.async_fire(EREIGNIS, {"aktion": "ruhe", "geraet": g, "anruf": "", "klingel": "", "name": z})
+            else:
+                out.append(g)
+        return out
+
     def erlaubt(self, g: str) -> bool:
         f = self.freigabe()
         return f["modus"] == "alle" or g in f["geraete"]
@@ -316,9 +344,11 @@ class Tuerklingel:
         """von ruft ziele (Geräte, "gruppe:<Name>", "alle"). von nimmt sofort an (leitet), die anderen klingeln."""
         if not re.fullmatch(r"mobile_app_[a-z0-9_]+", von or ""):
             return None, "Gerät unbekannt"
-        an = [g for g in self.ziele(ziele or ["alle"]) if g != von]
+        alle_an = [g for g in self.ziele(ziele or ["alle"]) if g != von]
+        an = self.nicht_ruhig(alle_an, "Hausruf")
         if not an:
-            return None, "Niemand zum Anrufen (Geräte mit App „Türklingel“)"
+            return None, ("Alle Angerufenen sind gerade in einer Ruhe-Zone" if alle_an
+                          else "Niemand zum Anrufen (Geräte mit App „Türklingel“)")
         jetzt = time.time()
         aid = f"hausruf_{int(jetzt * 1000)}"
         self.anrufe = {i: y for i, y in self.anrufe.items() if jetzt - y["start"] < 3600}
@@ -450,7 +480,7 @@ class Tuerklingel:
         for g in an:
             if g in x["teil"]:
                 continue
-            if x["frei"] and not x["ende"]:
+            if x["frei"] and not x["ende"] and not self.ruhig(g):
                 await self._senden(g, "BEENDEN", {"id": aid, "angebot": self._payload(
                     aid, g, hinweis=f"{self.name(x['von'])} spricht mit der Tür")})
             else:
@@ -462,7 +492,7 @@ class Tuerklingel:
             await self._senden(g, "BEENDEN", {"id": aid, "alle": True, "grund": grund})
 
     async def _einladen(self, x: dict, aid: str, ziele: list[str]) -> tuple[bool, str]:
-        neu = [g for g in self.ziele(ziele) if g not in x["teil"]]
+        neu = self.nicht_ruhig([g for g in self.ziele(ziele) if g not in x["teil"]], "Dazuholen")
         if not neu:
             return False, "Niemand zum Dazuholen"
         von = self.name(x["von"])
