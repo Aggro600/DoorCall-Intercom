@@ -114,7 +114,9 @@ public class Start extends Activity {
         }
         JSONObject l = Anruf.letzter(this);
         long zeit = Anruf.prefs(this).getLong("zeit", 0);
-        zeile(l.length() == 0 ? "Noch kein Klingeln von Home Assistant empfangen."
+        zeile(l.length() == 0 ? "Noch nicht mit Home Assistant verbunden. DoorCall richtet das Gerät von selbst ein (beim Start von "
+                + "Home Assistant, bei neuen Geräten binnen 10 Minuten) – oder in Home Assistant › DoorCall › „Jetzt Geräte suchen“."
+                : l.optBoolean("einrichten") ? "Mit Home Assistant verbunden – noch kein Klingeln empfangen."
                 : "Zuletzt: " + l.optString("name") + " (" + android.text.format.DateFormat.format("dd.MM. HH:mm", zeit) + ")", 15, Gespraech.GRAU);
         // Hausruf (2026-11-21): Gegensprechen mit anderen Geräten in der Wohnung, ohne Klingel
         if (l.length() > 0) {

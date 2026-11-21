@@ -268,6 +268,30 @@ class Tuerklingel:
                 out.append(z)
         return list(dict.fromkeys(out))[:16]
 
+    # ------------------------------------------------------------ Neue Geräte automatisch einrichten
+    def alle_handy_geraete(self) -> list[str]:
+        return sorted(s for s in self.hass.services.async_services().get("notify", {}) if s.startswith("mobile_app_"))
+
+    async def einrichten(self, nur: list[str] | None = None, alle: bool = False) -> list[str]:
+        """Stiller Gruß an Geräte, deren Türklingel-App HA noch nicht kennt: Adressen, KEIN Klingeln. Ist die App da,
+        speichert sie die Einstellungen und antwortet mit "hallo" -> Gerät ist bekannt (Probeanruf/Hausruf gehen)."""
+        bekannt = set(self.daten.get("app_geraete") or [])
+        ziele = [g for g in (nur or self.alle_handy_geraete()) if alle or g not in bekannt]
+        if not ziele:
+            return []
+        kl = self.daten.get("klingeln") or []
+        ext = self.extern()
+        for g in ziele:
+            k = next((x for x in kl if g in ((x.get("anruf") or {}).get("geraete") or [])), kl[0] if kl else {})
+            d = {"einrichten": True, "id": f"{k.get('id', 'tuer')}_0", "klingel": k.get("id", ""), "name": k.get("name", "Tür"),
+                 "webhook": self.webhook_url(), "ha": f"http://{self.basis()}", "geraet": g, "api": API}
+            if ext:
+                d["extern"] = ext
+                d["webhook_extern"] = f"{ext}/api/webhook/{self.webhook_id}"
+            await self._senden(g, "EINRICHTEN", d)
+        _LOGGER.info("DoorCall: Einrichtung angeboten an %s", ", ".join(ziele))
+        return ziele
+
     # ------------------------------------------------------------ Hausruf (Gegensprechen ohne Klingel)
     async def hausruf(self, von: str, ziele: list[str] | None = None) -> tuple[str | None, str]:
         """von ruft ziele (Geräte, "gruppe:<Name>", "alle"). von nimmt sofort an (leitet), die anderen klingeln."""
@@ -468,6 +492,16 @@ class Tuerklingel:
             return None
         aktion, aid, geraet = str(j.get("tuerklingel") or ""), str(j.get("id") or ""), str(j.get("geraet") or "")
         antwort = lambda ok, text: web.json_response({"ok": ok, "text": text})  # noqa: E731
+        if aktion == "hallo":   # App hat die stille Einrichtung bekommen (oder startet neu) -> Gerät mit App
+            if re.fullmatch(r"mobile_app_[a-z0-9_]+", geraet) and geraet in self.alle_handy_geraete():
+                neu = geraet not in (self.daten.get("app_geraete") or [])
+                self._app_merken(geraet)
+                if neu:
+                    _LOGGER.warning("DoorCall: neues Gerät mit Türklingel-App: %s (App %s)", self.name(geraet), j.get("app"))
+                    hass.bus.async_fire(EREIGNIS, {"aktion": "neues_geraet", "geraet": geraet, "anruf": "", "klingel": "",
+                                                   "name": self.name(geraet), "app": j.get("app")})
+                return antwort(True, "")
+            return antwort(False, "Gerät unbekannt")
         if aktion in ("hausruf_start", "hausruf_ziele"):   # Hausruf aus der App: nur Geräte, die die App schon kennt
             if geraet not in self.app_geraete():
                 return antwort(False, "Gerät unbekannt")

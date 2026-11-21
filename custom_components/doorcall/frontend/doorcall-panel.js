@@ -70,6 +70,14 @@ class DoorCallPanel extends HTMLElement {
       <div class="note" style="margin-bottom:12px">Klingeln an der Tür kommt als echter Anruf auf Handys und Tablets (App „Türklingel“ und Home-Assistant-App nötig).
         Nach dem Annehmen: Live-Bild, Gegensprechen über go2rtc, Tür öffnen, Schalter und Ansagen. Mehrere Geräte bilden eine Gesprächsrunde.</div>
       ${this.msg ? `<div class="msg ${this.msgErr ? "err" : ""}">${esc(this.msg)}</div>` : ""}
+      <div class="karte"><h2><ha-icon icon="mdi:cellphone-check"></ha-icon>Geräte mit der App</h2>
+        <div class="zeile">${(this.info.app || []).length ? (this.info.app || []).map((g) => `<span>✓ ${esc(this._gname(g))}</span>`).join("")
+          : `<span class="note">Noch keins.</span>`}</div>
+        <div class="note">Neue Geräte richten sich von selbst ein: DoorCall schickt jedem Handy/Tablet mit Home-Assistant-App einen stillen Gruß
+          (es klingelt nicht). Ist die App „Türklingel“ installiert, meldet sie sich und erscheint hier – danach gehen Probeanruf und Hausruf.
+          Automatisch beim Start, bei neuen Geräten binnen 10 Minuten und alle 6 Stunden.</div>
+        <div class="zeile"><button class="ghost" data-a="suchen"><ha-icon icon="mdi:magnify"></ha-icon>Jetzt Geräte suchen</button></div>
+      </div>
       ${k.map((x, ki) => this._klingel(x, ki, geraete, grs)).join("")}
       ${k.length < 8 ? `<button class="ghost" data-a="add"><ha-icon icon="mdi:plus"></ha-icon>Klingel hinzufügen</button>` : ""}
       <div class="karte" style="margin-top:16px"><h2><ha-icon icon="mdi:account-group"></ha-icon>Gruppen</h2>
@@ -100,7 +108,7 @@ class DoorCallPanel extends HTMLElement {
         <label title="Für das Anruferbild und das Foto bei „verpasst“">Kamera ${this._sel(`data-k="kamera" data-ki="${ki}"`, k.kamera, ["camera"], "— keine —")}</label>
       </div>
       <hr><div class="note">Geräte, die klingeln (Home-Assistant-App + App „Türklingel“):</div>
-      <div class="zeile">${geraete.length ? geraete.map((g) => `<label><input type="checkbox" data-a2="geraet" data-ki="${ki}" data-g="${esc(g)}" ${(a.geraete || []).includes(g) ? "checked" : ""}>${esc(this._gname(g))}</label>`).join("")
+      <div class="zeile">${geraete.length ? geraete.map((g) => `<label><input type="checkbox" data-a2="geraet" data-ki="${ki}" data-g="${esc(g)}" ${(a.geraete || []).includes(g) ? "checked" : ""}>${esc(this._gname(g))}${(this.info.app || []).includes(g) ? " ✓" : ""}</label>`).join("")
         : `<span class="note">Kein Gerät mit Home-Assistant-App gefunden.</span>`}</div>
       ${grs.filter((g) => g.name).length ? `<div class="zeile"><span class="note">Gruppen:</span>${grs.filter((g) => g.name).map((g) => `<label><input type="checkbox" data-a2="gruppe" data-ki="${ki}" data-g="${esc(g.name)}" ${(a.gruppen || []).includes(g.name) ? "checked" : ""}>${esc(g.name)} <span class="note">(${(g.geraete || []).map((d) => esc(this._gname(d))).join(", ") || "leer"})</span></label>`).join("")}</div>` : ""}
       <div class="zeile">
@@ -198,6 +206,13 @@ class DoorCallPanel extends HTMLElement {
       this.info.gruppen.splice(Number(b.dataset.gi), 1);
       for (const x of this.d.klingeln) if (x.anruf?.gruppen) x.anruf.gruppen = x.anruf.gruppen.filter((n) => n !== gr.name);
       await this._gruppenSpeichern(); return this._speichern();
+    }
+    if (a === "suchen") {
+      try { const r = await this._hass.callWS({ type: "doorcall/suchen" });
+        this._melden(r.gefragt.length ? `Gefragt: ${r.gefragt.map((g) => this._gname(g)).join(", ")} – Geräte mit App melden sich in ein paar Sekunden.` : "Alle Geräte sind schon bekannt.");
+        setTimeout(async () => { try { this.info = await this._hass.callWS({ type: "doorcall/info" }); this._zeigen(); } catch (e) { /* egal */ } }, 8000); }
+      catch (err) { this._melden("Suchen: " + (err.message || err), true); }
+      return;
     }
     if (a === "test") {
       try { await this._hass.callWS({ type: "doorcall/test", kid: k.id }); this._melden(`Probeanruf „${k.name}“ geschickt.`); }

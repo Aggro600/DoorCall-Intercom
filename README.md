@@ -51,7 +51,8 @@ be brought in or locked out.
 1. HACS → Integrations → ⋮ → Custom repositories → `https://github.com/Aggro600/DoorCall-Intercom`, type
    *Integration* → install **DoorCall Intercom** → restart Home Assistant.
 2. Settings → Devices & services → Add integration → **DoorCall Intercom**.
-3. Open **DoorCall** in the sidebar: add a doorbell (trigger, camera), tick the devices, enter go2rtc address and
+3. Install the app „Türklingel“ on the phones/tablets – they set themselves up automatically (DoorCall sends a silent greeting to every device with the Home Assistant app; no ringing). Check under **DoorCall › Devices with the app** or press „Search devices now“.
+4. Open **DoorCall** in the sidebar: add a doorbell (trigger, camera), tick the devices, enter go2rtc address and
    stream, optionally door opener, switches, quick replies. Press **Test call**.
 
 Coming from ESPHomeRemote (≤ 2026.11.20)? DoorCall takes over the doorbell call settings automatically on first

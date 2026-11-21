@@ -48,6 +48,7 @@
             <intent-filter>
                 <action android:name="de.esphomeremote.klingel.KLINGELN" />
                 <action android:name="de.esphomeremote.klingel.BEENDEN" />
+                <action android:name="de.esphomeremote.klingel.EINRICHTEN" />
             </intent-filter>
         </receiver>
         <receiver android:name=".Knopf" android:exported="false" />

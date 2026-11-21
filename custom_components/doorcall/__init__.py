@@ -30,7 +30,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.3"
+VERSION_JS = "2026.11.22.4"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -139,9 +139,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ansichten(hass)
     if not hass.data.get(DOMAIN + "_ws"):
         hass.data[DOMAIN + "_ws"] = True
-        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test):
+        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen):
             websocket_api.async_register_command(hass, fn)
     await _panel(hass)
+    _einrichten_planen(hass, entry, t)
     if not hass.services.has_service(DOMAIN, "hausruf"):
         async def _hausruf(call: ServiceCall) -> None:
             aid, text = await _t(hass).hausruf(call.data["von"], call.data.get("an") or ["alle"])
@@ -151,6 +152,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             vol.Required("von"): vol.Match(r"^mobile_app_[a-z0-9_]+$"),
             vol.Optional("an"): vol.All(cv.ensure_list, [cv.string])}))
     return True
+
+
+def _einrichten_planen(hass: HomeAssistant, entry: ConfigEntry, t: Tuerklingel) -> None:
+    """Neue Geräte automatisch einrichten: 1 min nach dem Start, neue Handys binnen 10 min, sonst alle 6 h."""
+    from datetime import timedelta
+    from homeassistant.helpers.event import async_call_later, async_track_time_interval
+    gesehen: set[str] = set(t.alle_handy_geraete())
+
+    async def start(_now=None) -> None:
+        await t.einrichten()
+
+    async def neue(_now=None) -> None:
+        jetzt = set(t.alle_handy_geraete())
+        if neu := sorted(jetzt - gesehen):
+            await t.einrichten(neu)
+        gesehen.update(jetzt)
+
+    entry.async_on_unload(async_call_later(hass, 60, start))
+    entry.async_on_unload(async_track_time_interval(hass, neue, timedelta(minutes=10)))
+    entry.async_on_unload(async_track_time_interval(hass, start, timedelta(hours=6)))
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -237,3 +258,13 @@ async def ws_test(hass, connection, msg) -> None:
         connection.send_error(msg["id"], "ungueltig", "Keine Geräte für den Anruf eingestellt")
         return
     connection.send_result(msg["id"], {"anruf": aid})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "doorcall/suchen", vol.Optional("alle"): bool,
+                                  vol.Optional("geraet"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_suchen(hass, connection, msg) -> None:
+    """Knopf "Geräte suchen": allen Handys ohne bekannte App die Einrichtung schicken."""
+    nur = [msg["geraet"]] if msg.get("geraet") else None
+    connection.send_result(msg["id"], {"gefragt": await _t(hass).einrichten(nur, alle=bool(msg.get("alle")))})

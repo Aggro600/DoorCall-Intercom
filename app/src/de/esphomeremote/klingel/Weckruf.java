@@ -24,7 +24,8 @@ public class Weckruf extends BroadcastReceiver {
         JSONObject j = lesen(i);
         String a = String.valueOf(i.getAction());
         Log.i(Anruf.TAG, "Weckruf " + a + " " + j.optString("name") + " id=" + j.optString("id"));
-        if (a.endsWith(".BEENDEN")) Anruf.vonAussenBeenden(c, j);
+        if (a.endsWith(".EINRICHTEN")) Anruf.einrichten(c, j);   // stiller Gruß von DoorCall: Adressen merken, kein Klingeln
+        else if (a.endsWith(".BEENDEN")) Anruf.vonAussenBeenden(c, j);
         else { PendingResult pr = goAsync(); Anruf.klingeln(c, j, pr::finish); }
     }
 

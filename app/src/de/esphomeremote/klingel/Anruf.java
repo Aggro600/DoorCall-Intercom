@@ -671,6 +671,15 @@ public final class Anruf {
         prefs(c).edit().putString("letzter", cfg.toString()).putLong("zeit", System.currentTimeMillis()).apply();
     }
 
+    /** DoorCall richtet neue Geräte still ein (2026-11-21): Adressen merken (nur wenn noch keine oder andere da sind -
+     *  ein echter letzter Anruf mit Schaltern bleibt) und mit "hallo" antworten. Danach gehen Probeanruf und Hausruf. */
+    static void einrichten(Context c, JSONObject j) {
+        JSONObject l = letzter(c);
+        if (l.length() == 0 || !l.optString("webhook").equals(j.optString("webhook")) || !l.optString("geraet").equals(j.optString("geraet")))
+            prefs(c).edit().putString("letzter", j.toString()).putLong("zeit", System.currentTimeMillis()).apply();
+        anHa(c, "hallo", null, r -> Log.i(TAG, "Einrichtung: " + (r == null ? "HA nicht erreichbar" : r.toString())));
+    }
+
     static JSONObject letzter(Context c) {
         try {
             JSONObject j = new JSONObject(prefs(c).getString("letzter", "{}"));
