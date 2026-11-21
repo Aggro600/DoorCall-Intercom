@@ -205,6 +205,8 @@ class Tuerklingel:
                             "sprecher_set": []}
         for g in geraete:
             await self._senden(g, "KLINGELN", self._payload(aid, g))
+        if self.anrufe[aid]["modus"] == "gemischt":   # Rückkanal schon beim Klingeln öffnen (go2rtc braucht 6-8 s)
+            self.mischer(aid)._play()
         _LOGGER.info("Türklingel %s: Anruf %s an %s", k["name"], aid, ", ".join(geraete))
         return aid
 
@@ -706,8 +708,9 @@ class Mischer:
                 elif warte < -0.5:   # weit hinterher (Pause): Takt neu
                     naechst = time.monotonic()
                 x = self.t.anrufe.get(self.aid)
-                if not x or x.get("ende"):
-                    break
+                if not x or x.get("ende") or (not x.get("teil") and time.time() - x["start"] > 130) \
+                        or (x.get("angenommen") and not x.get("teil")):
+                    break   # vorbei, keiner rangegangen (verpasst/abgelehnt) oder alle weg
                 summe = [0] * MISCH_FRAME
                 for g, q in self.puffer.items():
                     if not self.t.darf_sprechen(x, g):
