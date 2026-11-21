@@ -93,7 +93,17 @@ device hears all others.
 
 **Start**
 - In the app: **"📢 Hausruf …"**.
-- **Dashboard button** – the call always starts from the device where it is pressed:
+- **Dashboard card with selection inside Home Assistant** (recommended, works everywhere – also on work phones with a
+  work profile):
+  ```yaml
+  type: custom:doorcall-hausruf-card
+  name: Hausruf
+  icon: mdi:account-voice
+  # an: alle            # optional: fixed target, no selection
+  ```
+  On first use the card asks once "Which device is this?" and remembers it in this browser/app (change via "other
+  device" in the window). After that: pick the target – done.
+- **Dashboard button via the app** – opens the selection of the app "Türklingel" on the device where it is pressed:
   ```yaml
   type: button
   name: Hausruf
@@ -136,5 +146,5 @@ Event **`doorcall_event`** with `aktion`, `geraet`, `anruf`, `klingel`, `name`:
 | No video | Check go2rtc address and stream; the device must reach go2rtc (away from home: external HA URL + WebRTC port) |
 | Nobody hears you outside | Camera needs a backchannel; mic button must not show yellow "Startet …"; turn the mic on |
 | Hausruf window does not open by itself | App → "allow showing the window right away (over other apps)" |
-| Dashboard button `doorcall://` does nothing | App ≥ 5.6 required; allow opening other apps in your kiosk browser |
+| Dashboard button `doorcall://` does nothing / "no app available" | App ≥ 5.6 required; allow opening other apps in your kiosk browser; work phone with work profile: links cannot cross profiles → use the card `custom:doorcall-hausruf-card` instead |
 | Chrome cannot reach Home Assistant (Android 17) | Allow Chrome the **"Local network"** permission |

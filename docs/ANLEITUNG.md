@@ -95,7 +95,16 @@ dass jedes Gerät alle anderen hört.
 
 **Starten**
 - In der App: **„📢 Hausruf …“**.
-- **Dashboard-Knopf** – der Anruf startet immer von dem Gerät, auf dem gedrückt wird:
+- **Dashboard-Karte mit Auswahl in Home Assistant** (empfohlen, geht überall – auch auf Diensthandys mit Arbeitsprofil):
+  ```yaml
+  type: custom:doorcall-hausruf-card
+  name: Hausruf
+  icon: mdi:account-voice
+  # an: alle            # optional: festes Ziel, dann ohne Auswahl
+  ```
+  Beim ersten Druck fragt die Karte einmal „Welches Gerät ist das?“ und merkt es sich in diesem Browser/dieser App
+  (änderbar über „anderes Gerät“ im Fenster). Danach: Ziel wählen – fertig.
+- **Dashboard-Knopf über die App** – öffnet die Auswahl der App „Türklingel“ auf dem Gerät, auf dem gedrückt wird:
   ```yaml
   type: button
   name: Hausruf
@@ -138,5 +147,5 @@ Ereignis **`doorcall_event`** mit `aktion`, `geraet`, `anruf`, `klingel`, `name`
 | Kein Bild | go2rtc-Adresse und Stream prüfen; das Gerät muss go2rtc erreichen (von unterwegs: externe HA-Adresse + WebRTC-Port) |
 | Draußen hört man nichts | Kamera braucht Rückkanal; Mikrofon-Knopf darf nicht gelb „Startet …“ zeigen; im Gespräch Mikrofon an |
 | Hausruf-Fenster geht nicht von selbst auf | App → „Fenster sofort zeigen erlauben (über anderen Apps)“ |
-| Dashboard-Knopf `doorcall://` tut nichts | App ≥ 5.6 nötig; im Kiosk-Browser das Öffnen anderer Apps erlauben |
+| Dashboard-Knopf `doorcall://` tut nichts / „keine App verfügbar“ | App ≥ 5.6 nötig; im Kiosk-Browser das Öffnen anderer Apps erlauben; Diensthandy mit Arbeitsprofil: Links können nicht zwischen Profilen wechseln → stattdessen die Karte `custom:doorcall-hausruf-card` nehmen |
 | Chrome erreicht Home Assistant nicht (Android 17) | Chrome die Berechtigung **„Lokales Netzwerk“** erlauben |

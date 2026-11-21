@@ -30,7 +30,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.9"
+VERSION_JS = "2026.11.22.10"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -142,7 +142,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ansichten(hass)
     if not hass.data.get(DOMAIN + "_ws"):
         hass.data[DOMAIN + "_ws"] = True
-        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen, ws_freigabe, ws_ruhe):
+        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen, ws_freigabe, ws_ruhe, ws_ziele):
             websocket_api.async_register_command(hass, fn)
     await _panel(hass)
     _einrichten_planen(hass, entry, t)
@@ -197,6 +197,9 @@ async def _panel(hass: HomeAssistant) -> None:
         hass.data[DOMAIN + "_static"] = True
         await hass.http.async_register_static_paths([StaticPathConfig(
             "/doorcall_static", os.path.join(os.path.dirname(__file__), "frontend"), cache_headers=False)])
+        # Dashboard-Karte custom:doorcall-hausruf-card überall verfügbar (ohne Ressource von Hand)
+        from homeassistant.components.frontend import add_extra_js_url
+        add_extra_js_url(hass, f"/doorcall_static/doorcall-hausruf-card.js?v={VERSION_JS}")
     await panel_custom.async_register_panel(
         hass, frontend_url_path="doorcall", webcomponent_name="doorcall-panel", sidebar_title="DoorCall",
         sidebar_icon="mdi:doorbell-video", module_url=f"/doorcall_static/doorcall-panel.js?v={VERSION_JS}",
@@ -304,3 +307,13 @@ async def ws_ruhe(hass, connection, msg) -> None:
     t.daten["ruhe"] = {g: list(dict.fromkeys(z))[:8] for g, z in msg["ruhe"].items() if z}
     await t.store.async_save(t.daten)
     connection.send_result(msg["id"], {"ruhe": t.daten["ruhe"]})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "doorcall/ziele"})
+@callback
+def ws_ziele(hass, connection, msg) -> None:
+    """Für die Dashboard-Karte (auch ohne Admin): Geräte mit App (Name) und Gruppen."""
+    t = _t(hass)
+    connection.send_result(msg["id"], {
+        "geraete": [{"id": g, "name": t.name(g)} for g in t.app_geraete()],
+        "gruppen": [{"id": f"gruppe:{gr['name']}", "name": gr["name"]} for gr in t.gruppen()]})
