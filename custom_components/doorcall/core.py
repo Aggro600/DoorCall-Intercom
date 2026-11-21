@@ -123,6 +123,9 @@ def validate_anruf(a) -> dict:
     gruppen = [str(g).strip()[:24] for g in (a.get("gruppen") or []) if str(g).strip()][:6]
     return {"gruppen": gruppen, "mitschauen": a.get("mitschauen", True) is not False,
             "sprechen": "gemischt" if a.get("sprechen") == "gemischt" else "einer",
+            # Mindestlautstärke beim Klingeln in % (2026-11-21): auch wenn das Handy lautlos ist (App klingelt dann über den
+            # Wecker-Kanal); 0 = aus
+            "laut": max(0, min(100, int(a.get("laut", 70) if a.get("laut") is not None else 70))),
             "gaeste_bedienen": a.get("gaeste_bedienen", True) is not False,
             "antwort": an, "antwort_oeffnen_s": max(0, min(60, int(a.get("antwort_oeffnen_s") or 8))),
             "geraete": geraete, "go2rtc": go2rtc, "src": src, "dauer": max(10, min(120, int(a.get("dauer") or 30))),
@@ -227,9 +230,10 @@ class Tuerklingel:
              "ha": f"http://{self.basis()}", "bild": bool(k.get("kamera")),
              "aktionen": [y["name"] for y in a.get("aktionen") or []], **self.status(k),
              "antworten": self._antworten(a), "antwort_oeffnen_s": a.get("antwort_oeffnen_s", 8),
-             "modus": x.get("modus", "einer"), "api": API, **extra}
+             "modus": x.get("modus", "einer"), "api": API, "laut": a.get("laut", 70), **extra}
         if x.get("art") == "haus":   # Hausruf: keine Kamera, keine Tür - nur Gegensprechen zwischen den Geräten
-            d.update({"name": "Hausruf", "art": "haus", "go2rtc": "", "src": "", "oeffnen": False, "bild": False,
+            erste = ((self.daten.get("klingeln") or [{}])[0].get("anruf") or {})
+            d.update({"laut": erste.get("laut", 70), "name": "Hausruf", "art": "haus", "go2rtc": "", "src": "", "oeffnen": False, "bild": False,
                       "aktionen": [], "schalter": [], "anzeigen": [], "antworten": [], "dauer": 45,
                       "von_name": self.name(x.get("starter", ""))})
         if ext := self.extern():   # unterwegs: Signal über HA ({API}/signal), Rückmeldung über den öffentlichen Webhook

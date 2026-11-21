@@ -211,6 +211,7 @@ public final class Anruf {
             } else Log.w(TAG, "Telecom erlaubt gerade keinen Anruf");
         } catch (Exception e) { Log.w(TAG, "Telecom: " + e); }
         if (!ueberTelecom) klingelnZeigen(c);    // ohne Telecom: nur Benachrichtigung
+        lautKlingeln(c);
         if (haus()) {   // Hausruf: Anruffenster gleich zeigen (geht aus dem Hintergrund mit "Über anderen Apps anzeigen")
             try { c.startActivity(new Intent(c, Gespraech.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
             catch (Exception e) { Log.i(TAG, "Hausruf-Fenster: " + e); }
@@ -222,7 +223,43 @@ public final class Anruf {
     static void klingelnZeigen(Context c) { klingelnZeigen(c, false); }
 
     /** Lautstärketaste beim Klingeln: Ton aus, Anruf bleibt stehen. */
-    static void klingelnZeigenLeise(Context c) { if (zustand == KLINGELT) klingelnZeigen(c, true); }
+    static void klingelnZeigenLeise(Context c) { weckerAus(c); if (zustand == KLINGELT) klingelnZeigen(c, true); }
+
+    // ---------- Mindestlautstärke (2026-11-21): auch wenn das Handy lautlos/leise ist ----------
+    private static android.media.Ringtone wecker;
+    private static int weckerVorher = -1;
+
+    /** Lautlos, Vibration oder Klingel-Lautstärke unter "laut" %: Klingelton selbst über den Wecker-Kanal spielen. */
+    static void lautKlingeln(Context c) {
+        int laut = cfg.optInt("laut", 0);
+        if (laut <= 0 || wecker != null) return;
+        try {
+            android.media.AudioManager am = c.getSystemService(android.media.AudioManager.class);
+            int ring = am.getStreamVolume(android.media.AudioManager.STREAM_RING), ringMax = am.getStreamMaxVolume(android.media.AudioManager.STREAM_RING);
+            boolean zuLeise = am.getRingerMode() != android.media.AudioManager.RINGER_MODE_NORMAL || ring * 100 < laut * ringMax;
+            if (!zuLeise) return;
+            int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM);
+            int ziel = Math.max(1, Math.round(laut / 100f * max));
+            weckerVorher = am.getStreamVolume(android.media.AudioManager.STREAM_ALARM);
+            if (weckerVorher < ziel) am.setStreamVolume(android.media.AudioManager.STREAM_ALARM, ziel, 0);
+            wecker = RingtoneManager.getRingtone(c, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE));
+            if (wecker == null) return;
+            wecker.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            if (Build.VERSION.SDK_INT >= 28) wecker.setLooping(true);
+            wecker.play();
+            Log.i(TAG, "Handy lautlos/leise (Modus " + am.getRingerMode() + ", Klingel " + ring + "/" + ringMax + ") - klingle über Wecker-Kanal mit " + laut + " %");
+        } catch (Exception e) { Log.w(TAG, "Mindestlautstärke: " + e); }
+    }
+
+    static void weckerAus(Context c) {
+        if (wecker != null) { try { wecker.stop(); } catch (Exception ignored) {} wecker = null; }
+        if (weckerVorher >= 0) {
+            try { c.getSystemService(android.media.AudioManager.class).setStreamVolume(android.media.AudioManager.STREAM_ALARM, weckerVorher, 0); }
+            catch (Exception ignored) {}
+            weckerVorher = -1;
+        }
+    }
 
     static void klingelnZeigen(Context c, boolean leise) { klingelnZeigen(c, leise, false); }
 
@@ -255,6 +292,7 @@ public final class Anruf {
 
     static void annehmen(Context c) {
         if (zustand != KLINGELT) return;
+        weckerAus(c);
         verlaufAusgang(c, "angenommen");
         H.removeCallbacks(ZEIT_UM);
         zustand = AKTIV;
@@ -483,6 +521,7 @@ public final class Anruf {
         if (zustand == AUS) return;
         H.removeCallbacks(ZEIT_UM);
         boolean warAktiv = zustand == AKTIV;
+        weckerAus(c);
         zustand = AUS;
         HausAudio.stop();
         if (warAktiv) tonKoppeln(c, false);

@@ -9,7 +9,7 @@ const LISTEN = {
   anzeigen: ["Anzeigen im Anruf (z. B. Schloss, Türkontakt)", 3, null, 20],
 };
 const LEER = () => ({ geraete: [], gruppen: [], go2rtc: "", src: "", dauer: 30, oeffnen: "", oeffnen_frei: false, mitschauen: true,
-  gaeste_bedienen: true, sprechen: "einer", antwort: "", antwort_oeffnen_s: 8, aktionen: [], schalter: [], anzeigen: [] });
+  gaeste_bedienen: true, sprechen: "einer", laut: 70, antwort: "", antwort_oeffnen_s: 8, aktionen: [], schalter: [], anzeigen: [] });
 
 class DoorCallPanel extends HTMLElement {
   set hass(h) { const erst = !this._hass; this._hass = h; if (erst) this._laden(); }
@@ -123,6 +123,8 @@ class DoorCallPanel extends HTMLElement {
         <label title="Name des Streams in go2rtc">Stream <input data-a2="src" data-ki="${ki}" value="${esc(a.src || "")}" placeholder="z. B. haustur" style="width:120px"></label>
         <label>Klingeln <input type="number" data-a2="dauer" data-ki="${ki}" min="10" max="120" value="${a.dauer || 30}" style="width:64px"> s</label>
       </div>
+      <div class="zeile"><label title="0 = aus">Mindestlautstärke beim Klingeln <input type="number" data-a2="laut" data-ki="${ki}" min="0" max="100" step="10" value="${a.laut ?? 70}" style="width:64px"> %</label></div>
+      <div class="note erkl">Ist ein Handy lautlos, auf Vibration oder leiser als dieser Wert, klingelt die App trotzdem – über den Wecker-Kanal (wie ein Wecker, auch bei „lautlos“) mit dieser Lautstärke. Nach dem Klingeln wird die Lautstärke zurückgestellt. 0 = aus (dann gilt die Lautstärke des Handys). „Nicht stören“ in der App Türklingel bleibt still.</div>
       <hr><div class="note">Gesprächsrunde</div>
       <div class="zeile">
         <label title="Wer zuerst annimmt, leitet. Die anderen Geräte können als Gast mitschauen; die Leitung kann das sperren und Geräte dazuholen."><input type="checkbox" data-a2="mitschauen" data-ki="${ki}" ${a.mitschauen !== false ? "checked" : ""}>Mitschauen auf den anderen Geräten erlauben</label>
@@ -204,6 +206,7 @@ class DoorCallPanel extends HTMLElement {
       a.oeffnen_frei = t.checked;
     } else if (f === "mitschauen" || f === "gaeste_bedienen") a[f] = t.checked;
     else if (f === "dauer") a.dauer = Math.max(10, Math.min(120, Number(t.value) || 30));
+    else if (f === "laut") a.laut = Math.max(0, Math.min(100, Number(t.value) || 0));
     else if (f === "antwort_oeffnen_s") a.antwort_oeffnen_s = Math.max(0, Math.min(60, Number(t.value) || 0));
     else { a[f] = t.value.trim(); if (f === "oeffnen" && !a.oeffnen) a.oeffnen_frei = false; }
     if (f === "src" && a.src && !a.go2rtc && this.info.go2rtc) a.go2rtc = this.info.go2rtc;
