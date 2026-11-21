@@ -33,6 +33,7 @@ be brought in or locked out.
     von: mobile_app_tablet_living_room   # caller
     an: ["alle"]                         # devices, "gruppe:<name>" or "alle"
   ```
+- **Dashboard button for Hausruf:** a button with `tap_action: {action: url, url_path: "doorcall://hausruf"}` opens the target selection on the device where it was pressed (Fully, Home Assistant app) – the call always starts from that device. `doorcall://hausruf?an=mobile_app_kitchen_tablet` calls a fixed target.
 - **Groups** (e.g. "Phones", "Flat") usable as call targets and for bringing people in.
 - **Missed calls, history** ("who was there" with photos) and "do not disturb" times in the app.
 - From outside your home: works through your Home Assistant external URL (signalling via HA; media needs

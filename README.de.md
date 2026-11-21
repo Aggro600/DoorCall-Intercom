@@ -34,6 +34,7 @@ mit, werden dazugeholt oder ausgesperrt.
     an: ["alle"]                        # Geräte, "gruppe:<Name>" oder "alle"
   ```
   Damit das Gesprächsfenster sofort aufgeht, in der App „Fenster sofort zeigen erlauben“ antippen.
+- **Dashboard-Knopf für den Hausruf:** ein Knopf mit `tap_action: {action: url, url_path: "doorcall://hausruf"}` öffnet die Ziel-Auswahl auf dem Gerät, auf dem gedrückt wurde (Fully, Home-Assistant-App) – der Anruf startet immer von diesem Gerät. `doorcall://hausruf?an=mobile_app_tablet_kuche` ruft ein festes Ziel.
 - **Gruppen** (z. B. „Handys“, „Wohnung“) als Anrufziel und zum Dazuholen.
 - **Verpasste Anrufe, Verlauf** („Wer war da“ mit Fotos) und „Nicht stören“-Zeiten in der App.
 - Von unterwegs: über die externe Adresse von Home Assistant (Signal über HA; Bild/Ton brauchen den

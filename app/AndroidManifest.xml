@@ -43,6 +43,20 @@
             android:screenOrientation="unspecified"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
+        <!-- Hausruf von einem Dashboard-Knopf (2026-11-21): Link doorcall://hausruf[?an=...] öffnet die Auswahl auf
+             GENAU dem Gerät, auf dem gedrückt wurde (Fully, Home-Assistant-App, Browser) - Absender = dieses Gerät -->
+        <activity
+            android:name=".HausrufWahl"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="doorcall" android:host="hausruf" />
+            </intent-filter>
+        </activity>
         <!-- Weckruf aus Home Assistant (Companion-App: command_broadcast_intent mit intent_package_name) -->
         <receiver android:name=".Weckruf" android:exported="true">
             <intent-filter>
