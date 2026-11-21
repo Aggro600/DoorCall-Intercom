@@ -1,0 +1,12 @@
+hausruf:
+  fields:
+    von:
+      required: true
+      example: mobile_app_tablet_wohnzimmer
+      selector:
+        text:
+    an:
+      required: false
+      example: '["alle"]'
+      selector:
+        object:

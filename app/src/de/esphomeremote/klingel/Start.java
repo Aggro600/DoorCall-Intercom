@@ -46,6 +46,30 @@ public class Start extends Activity {
     @Override
     protected void onResume() { super.onResume(); zeigen(); }
 
+    /** Hausruf: Ziele von Home Assistant holen (Alle, Gruppen, Geräte), eins wählen, anrufen. */
+    private void hausruf() {
+        android.widget.Toast.makeText(this, "Hole Geräte …", android.widget.Toast.LENGTH_SHORT).show();
+        Anruf.anHa(this, "hausruf_ziele", null, r -> {
+            org.json.JSONArray z = r == null ? null : r.optJSONArray("ziele");
+            if (z == null || z.length() == 0) {
+                android.widget.Toast.makeText(this, r == null ? "Home Assistant nicht erreichbar" : r.optString("text", "Keine Geräte"), android.widget.Toast.LENGTH_LONG).show();
+                return;
+            }
+            String[] namen = new String[z.length()];
+            for (int i = 0; i < namen.length; i++) namen[i] = z.optJSONObject(i).optString("name");
+            new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Hausruf an …")
+                    .setItems(namen, (d, w) -> {
+                        JSONObject x = new JSONObject();
+                        try { x.put("ziele", new org.json.JSONArray().put(z.optJSONObject(w).optString("id"))); } catch (Exception ignored) {}
+                        Anruf.anHa(this, "hausruf_start", x, rr -> android.widget.Toast.makeText(this,
+                                rr == null ? "Home Assistant nicht erreichbar" : rr.optString("text"), android.widget.Toast.LENGTH_LONG).show());
+                    })
+                    .setNegativeButton("Abbrechen", null)
+                    .show();
+        });
+    }
+
     private void zeigen() {
         liste.removeAllViews();
         String ver = "";
@@ -92,6 +116,13 @@ public class Start extends Activity {
         long zeit = Anruf.prefs(this).getLong("zeit", 0);
         zeile(l.length() == 0 ? "Noch kein Klingeln von Home Assistant empfangen."
                 : "Zuletzt: " + l.optString("name") + " (" + android.text.format.DateFormat.format("dd.MM. HH:mm", zeit) + ")", 15, Gespraech.GRAU);
+        // Hausruf (2026-11-21): Gegensprechen mit anderen Geräten in der Wohnung, ohne Klingel
+        if (l.length() > 0) {
+            knopf("📢  Hausruf …", this::hausruf);
+            if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this))
+                knopf("Hausruf: Fenster sofort zeigen erlauben (über anderen Apps)", () -> startActivity(
+                        new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))));
+        }
         if (l.length() > 0) knopf("Probeanruf", () -> {
             // Erst Home Assistant bitten (echter Anruf: Foto, Tür öffnen, Schalter); geht das nicht, nur hier üben
             android.widget.Toast.makeText(this, "Probeanruf wird angefordert …", android.widget.Toast.LENGTH_SHORT).show();

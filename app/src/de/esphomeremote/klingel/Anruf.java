@@ -109,6 +109,7 @@ public final class Anruf {
         App.ctx = c.getApplicationContext();
         if (zustand == AKTIV && System.currentTimeMillis() - beginn > 15 * 60_000L) { Log.w(TAG, "Gespräch hängt seit 15 min - beendet"); ende(c, null, DisconnectCause.LOCAL); }
         if (zustand == AKTIV) { Log.i(TAG, "Gespräch läuft, neues Klingeln nur gemeldet"); if (fertig != null) fertig.run(); return; }
+        if (neu.optBoolean("sofort")) { sofortAnnehmen(c, neu); if (fertig != null) fertig.run(); return; }   // Hausruf: ich rufe selbst
         if (zustand == KLINGELT && verbindung != null) { cfg = neu; aktualisieren(); if (fertig != null) fertig.run(); return; }
         String lokal = neu.optString("bild_lokal", "");   // Probeanruf aus der App: letztes Foto aus "Wer war da"
         if (!lokal.isEmpty()) {
@@ -267,6 +268,7 @@ public final class Anruf {
             }
         });
         tonKoppeln(c, true);
+        if (haus()) { HausAudio.stumm = false; HausAudio.start(cfg); }   // Hausruf: Mikro gleich offen
         aktualisieren();
     }
 
@@ -364,6 +366,50 @@ public final class Anruf {
         }
     }
 
+    /** Hausruf, den dieses Gerät selbst gestartet hat: ohne Klingeln gleich im Gespräch (leitet). */
+    static void sofortAnnehmen(Context c, JSONObject neu) {
+        if (zustand != AUS) return;
+        cfg = neu;
+        angebotWeg(c, "");
+        bild = null;
+        verlauf(c, "Hausruf");
+        zustand = KLINGELT;
+        beginn = System.currentTimeMillis();
+        kontoAnmelden(c);
+        try {
+            TelecomManager tm = c.getSystemService(TelecomManager.class);
+            Bundle b = new Bundle();
+            b.putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, Uri.fromParts("tuer", name(), null));
+            if (tm != null && tm.isIncomingCallPermitted(konto(c))) tm.addNewIncomingCall(konto(c), b);
+        } catch (Exception e) { Log.w(TAG, "Telecom: " + e); }
+        annehmen(c);
+        try {   // Oberfläche: geht aus dem Hintergrund nur mit "Über anderen Apps anzeigen" - sonst über die Laufend-Meldung
+            c.startActivity(new Intent(c, Gespraech.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception e) { Log.i(TAG, "Hausruf-Fenster: " + e); }
+    }
+
+    static boolean haus() { return "haus".equals(cfg.optString("art")); }
+
+    /** Webhook ohne laufenden Anruf (Hausruf starten, Ziele holen) mit den Daten des letzten Anrufs. */
+    static void anHa(Context c, String aktion, JSONObject zusatz, java.util.function.Consumer<JSONObject> antwort) {
+        JSONObject l = letzter(c);
+        final JSONObject j = new JSONObject();
+        try {
+            j.put("tuerklingel", aktion).put("geraet", l.optString("geraet")).put("app", appVersion());
+            if (zusatz != null) for (java.util.Iterator<String> it = zusatz.keys(); it.hasNext(); ) { String k = it.next(); j.put(k, zusatz.get(k)); }
+        } catch (Exception ignored) {}
+        new Thread(() -> {
+            for (String url : new String[]{l.optString("webhook", ""), l.optString("webhook_extern", "")}) {
+                if (url.isEmpty()) continue;
+                try {
+                    Netz.Antwort a = Netz.post(url, j.toString(), 2500, 8000);
+                    if (a.code < 500) { final JSONObject r = new JSONObject(a.text); H.post(() -> antwort.accept(r)); return; }
+                } catch (Exception e) { Log.i(TAG, aktion + ": " + e); }
+            }
+            H.post(() -> antwort.accept(null));
+        }).start();
+    }
+
     /** Mitschauen: als Gast ins laufende Gespräch (Telecom-Anruf ohne Klingeln, gleich aktiv). */
     static boolean beitreten(Context c) {
         if (angebot == null || zustand != AUS) return false;
@@ -434,6 +480,7 @@ public final class Anruf {
         H.removeCallbacks(ZEIT_UM);
         boolean warAktiv = zustand == AKTIV;
         zustand = AUS;
+        HausAudio.stop();
         if (warAktiv) tonKoppeln(c, false);
         nm(c).cancel(N_ANRUF);
         if (verbindung != null) { verbindung.trennen(grund); verbindung = null; }

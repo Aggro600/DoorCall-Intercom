@@ -6,6 +6,24 @@
         "description": "Klingeln an der Tür kommt als echter Anruf auf Handys und Tablets (App „Türklingel“). Nach der Einrichtung in der Seitenleiste „DoorCall“ öffnen und Klingeln, Geräte und Gruppen einstellen."
       }
     },
-    "abort": {"single_instance_allowed": "DoorCall Intercom ist schon eingerichtet."}
+    "abort": {
+      "single_instance_allowed": "DoorCall Intercom ist schon eingerichtet."
+    }
+  },
+  "services": {
+    "hausruf": {
+      "name": "Hausruf",
+      "description": "Ein Gerät ruft andere Geräte in der Wohnung an (ohne Klingel). Der Anrufer ist sofort drin und leitet, die anderen klingeln.",
+      "fields": {
+        "von": {
+          "name": "Von",
+          "description": "Rufendes Gerät (notify-Dienst der Home-Assistant-App, z. B. mobile_app_tablet_wohnzimmer)."
+        },
+        "an": {
+          "name": "An",
+          "description": "Geräte, \"gruppe:<Name>\" oder \"alle\" (alle Geräte mit der App). Standard: alle."
+        }
+      }
+    }
   }
 }

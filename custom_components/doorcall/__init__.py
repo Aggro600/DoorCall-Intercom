@@ -19,7 +19,9 @@ import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import HomeAssistantError
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 
@@ -28,7 +30,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.21.5"
+VERSION_JS = "2026.11.22.1"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -140,6 +142,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test):
             websocket_api.async_register_command(hass, fn)
     await _panel(hass)
+    if not hass.services.has_service(DOMAIN, "hausruf"):
+        async def _hausruf(call: ServiceCall) -> None:
+            aid, text = await _t(hass).hausruf(call.data["von"], call.data.get("an") or ["alle"])
+            if not aid:
+                raise HomeAssistantError(text)
+        hass.services.async_register(DOMAIN, "hausruf", _hausruf, schema=vol.Schema({
+            vol.Required("von"): vol.Match(r"^mobile_app_[a-z0-9_]+$"),
+            vol.Optional("an"): vol.All(cv.ensure_list, [cv.string])}))
     return True
 
 
@@ -152,6 +162,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for aid in list(t._mischer):
             t.mischer_stop(aid)
     frontend.async_remove_panel(hass, "doorcall")
+    hass.services.async_remove(DOMAIN, "hausruf")
     return True
 
 

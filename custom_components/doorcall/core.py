@@ -67,6 +67,8 @@ ZUSTAND_TEXT = {"on": "an", "off": "aus", "locked": "verriegelt", "unlocked": "e
 OFFEN_KLASSEN = ("door", "window", "opening", "garage_door", "lock")
 
 STANDARD = {"geraete": [], "go2rtc": "", "src": "", "dauer": 30, "oeffnen": "", "oeffnen_frei": False}
+HAUS_RATE = 16000            # Hausruf (Gerät zu Gerät): 16 kHz mono, 16 bit little endian
+HAUS_FRAME = 320             # 20 ms
 MISCH_RATE = 8000            # Mischer: 8 kHz mono, 16 bit (die Klingel will PCMU = 8 kHz)
 MISCH_FRAME = 160            # 20 ms
 LEBENSZEICHEN = 25          # Sekunden ohne Status-Abfrage -> Teilnehmer gilt als weg (App fragt im Gespräch alle 2 s)
@@ -142,6 +144,7 @@ class Tuerklingel:
         self.anrufe: dict[str, dict] = {}     # id -> {kid, start, geraete, angenommen, von}
         self._probe_zeit: dict[str, float] = {}   # Gerät -> letzter Probeanruf aus der App
         self._mischer: dict[str, Mischer] = {}
+        self._haus: dict[str, HausMischer] = {}
         self._rk: dict[str, tuple[float, bool]] = {}   # Rückkanal-Zustand je go2rtc-Stream (Zwischenspeicher)
         wh = daten.get("webhook")
         if not wh:
@@ -225,6 +228,10 @@ class Tuerklingel:
              "aktionen": [y["name"] for y in a.get("aktionen") or []], **self.status(k),
              "antworten": self._antworten(a), "antwort_oeffnen_s": a.get("antwort_oeffnen_s", 8),
              "modus": x.get("modus", "einer"), "api": API, **extra}
+        if x.get("art") == "haus":   # Hausruf: keine Kamera, keine Tür - nur Gegensprechen zwischen den Geräten
+            d.update({"name": "Hausruf", "art": "haus", "go2rtc": "", "src": "", "oeffnen": False, "bild": False,
+                      "aktionen": [], "schalter": [], "anzeigen": [], "antworten": [], "dauer": 45,
+                      "von_name": self.name(x.get("starter", ""))})
         if ext := self.extern():   # unterwegs: Signal über HA ({API}/signal), Rückmeldung über den öffentlichen Webhook
             d["extern"] = ext
             d["webhook_extern"] = f"{ext}/api/webhook/{self.webhook_id}"
@@ -255,9 +262,43 @@ class Tuerklingel:
             if z.startswith("gruppe:"):
                 gr = next((x for x in self.gruppen() if x["name"].lower() == z[7:].lower()), None)
                 out += (gr or {}).get("geraete") or []
+            elif z == "alle":
+                out += self.app_geraete()
             elif re.fullmatch(r"mobile_app_[a-z0-9_]+", z):
                 out.append(z)
         return list(dict.fromkeys(out))[:16]
+
+    # ------------------------------------------------------------ Hausruf (Gegensprechen ohne Klingel)
+    async def hausruf(self, von: str, ziele: list[str] | None = None) -> tuple[str | None, str]:
+        """von ruft ziele (Geräte, "gruppe:<Name>", "alle"). von nimmt sofort an (leitet), die anderen klingeln."""
+        if not re.fullmatch(r"mobile_app_[a-z0-9_]+", von or ""):
+            return None, "Gerät unbekannt"
+        an = [g for g in self.ziele(ziele or ["alle"]) if g != von]
+        if not an:
+            return None, "Niemand zum Anrufen (Geräte mit App „Türklingel“)"
+        jetzt = time.time()
+        aid = f"hausruf_{int(jetzt * 1000)}"
+        self.anrufe = {i: y for i, y in self.anrufe.items() if jetzt - y["start"] < 3600}
+        self.anrufe[aid] = {"kid": "", "art": "haus", "starter": von, "start": jetzt, "geraete": [von, *an],
+                            "angenommen": 0.0, "von": "", "schluessel": {}, "teil": {}, "frei": True, "sprecher": "",
+                            "eingeladen": list(an), "ende": 0.0, "modus": "haus", "gesperrt": [], "sprecher_set": []}
+        await self._senden(von, "KLINGELN", self._payload(aid, von, sofort=True, hinweis="Hausruf läuft …"))
+        for g in an:
+            await self._senden(g, "KLINGELN", self._payload(aid, g, hinweis=f"{self.name(von)} ruft"))
+        _LOGGER.info("Hausruf %s: %s ruft %s", aid, von, ", ".join(an))
+        self.hass.bus.async_fire(EREIGNIS, {"aktion": "hausruf", "geraet": von, "anruf": aid, "klingel": "",
+                                            "name": "Hausruf", "an": an})
+        return aid, "Ruft " + ", ".join(self.name(g) for g in an)
+
+    def haus_mischer(self, aid: str) -> "HausMischer":
+        m = self._haus.get(aid)
+        if m is None or m.aus:
+            m = self._haus[aid] = HausMischer(self, aid)
+        return m
+
+    def haus_stop(self, aid: str) -> None:
+        if m := self._haus.pop(aid, None):
+            m.stop()
 
     def app_geraete(self) -> list[str]:
         """Geräte, auf denen die Türklingel-App läuft: alle eingetragenen + alle, die sich je per Webhook gemeldet haben."""
@@ -409,6 +450,15 @@ class Tuerklingel:
             return None
         aktion, aid, geraet = str(j.get("tuerklingel") or ""), str(j.get("id") or ""), str(j.get("geraet") or "")
         antwort = lambda ok, text: web.json_response({"ok": ok, "text": text})  # noqa: E731
+        if aktion in ("hausruf_start", "hausruf_ziele"):   # Hausruf aus der App: nur Geräte, die die App schon kennt
+            if geraet not in self.app_geraete():
+                return antwort(False, "Gerät unbekannt")
+            if aktion == "hausruf_ziele":
+                return web.json_response({"ok": True, "ziele": [{"id": "alle", "name": "Alle"}] + [
+                    {"id": f"gruppe:{gr['name']}", "name": f"Gruppe {gr['name']}"} for gr in self.gruppen()] + [
+                    {"id": g, "name": self.name(g)} for g in self.app_geraete() if g != geraet]})
+            aid, text = await self.hausruf(geraet, [str(z) for z in (j.get("ziele") or ["alle"])][:16])
+            return antwort(bool(aid), text)
         if aktion == "probeanruf":   # Probeanruf-Knopf der App (2026-11-21): echter Anruf nur an dieses Gerät
             return antwort(*await self._probeanruf(str(j.get("klingel") or aid.rsplit("_", 1)[0]), geraet))
         x = self.anrufe.get(aid)
@@ -431,6 +481,18 @@ class Tuerklingel:
             if geraet not in x["geraete"]:
                 return antwort(False, "Gerät gehört nicht zu diesem Anruf")
             self._aufraeumen(x)
+            if x.get("art") == "haus":
+                if geraet == x.get("starter") and not x["von"]:
+                    x["angenommen"], x["von"] = jetzt, geraet
+                    x["teil"][geraet] = {"seit": jetzt, "zuletzt": jetzt}
+                    return web.json_response({"ok": True, "text": "", "rolle": "leiter"})
+                if geraet not in x["teil"]:
+                    if not x["teil"] and x["angenommen"]:
+                        return antwort(False, "Gespräch ist schon vorbei")
+                    x["teil"][geraet] = {"seit": jetzt, "zuletzt": jetzt}
+                    if not x["von"]:
+                        x["angenommen"], x["von"] = jetzt, geraet
+                return web.json_response({"ok": True, "text": "", "rolle": "leiter" if geraet == x["von"] else "gast"})
             if not x["angenommen"] or (not x["teil"] and not x["von"]):
                 x["angenommen"], x["von"] = jetzt, geraet
                 x["teil"][geraet] = {"seit": jetzt, "zuletzt": jetzt}
@@ -451,6 +513,7 @@ class Tuerklingel:
                     andere = [g for g in x["teil"] if g != geraet]
                     x["teil"].clear(); x["ende"] = jetzt
                     self.mischer_stop(aid)
+                    self.haus_stop(aid)
                     grund = f"{self.name(geraet)} hat das Gespräch für alle beendet"
                     for g in andere:
                         x.setdefault("grund", {})[g] = grund
@@ -460,6 +523,7 @@ class Tuerklingel:
                     if not x["teil"]:
                         x["ende"] = jetzt
                         self.mischer_stop(aid)
+                        self.haus_stop(aid)
                         await self._alle_raus(x, aid, [g for g in x["geraete"] if g != geraet], "Gespräch beendet")
         elif aktion in ("status", "schalten", "sprechen", "freigabe", "einladen", "modus", "mik_sperren"):
             if not schluessel_ok:
@@ -733,6 +797,9 @@ class Mischer:
                 elif warte < -0.5:   # weit hinterher (Pause): Takt neu
                     naechst = time.monotonic()
                 x = self.t.anrufe.get(self.aid)
+                self._zaehler = getattr(self, "_zaehler", 0) + 1
+                if x and self._zaehler % 50 == 0:   # 1x je Sekunde: Geräte ohne Lebenszeichen raus (sonst liefe der Mischer ewig)
+                    self.t._aufraeumen(x)
                 if not x or x.get("ende") or (not x.get("teil") and time.time() - x["start"] > 130) \
                         or (x.get("angenommen") and not x.get("teil")):
                     break   # vorbei, keiner rangegangen (verpasst/abgelehnt) oder alle weg
@@ -805,6 +872,151 @@ class MikView(HomeAssistantView):
         except Exception:  # noqa: BLE001
             pass
         return web.Response(status=200)
+
+
+class HausMischer:
+    """Hausruf: jedes Gerät schickt sein Mikrofon (16 kHz/16 bit LE), jedes Gerät hört die Summe aller ANDEREN
+    (mix-minus). Takt 20 ms, je Gerät 60 ms Vorlauf, höchstens 200 ms Rückstand."""
+
+    def __init__(self, t: "Tuerklingel", aid: str) -> None:
+        self.t, self.aid = t, aid
+        self.puffer: dict[str, list[bytes]] = {}
+        self.bereit: dict[str, bool] = {}
+        self.rest: dict[str, bytes] = {}
+        self.hoerer: dict[str, web.StreamResponse] = {}
+        self.aus = False
+        self.task = t.hass.async_create_background_task(self._takt(), f"doorcall_hausruf_{aid}")
+
+    def rein(self, g: str, daten: bytes) -> None:
+        daten = self.rest.pop(g, b"") + daten
+        n = len(daten) // (HAUS_FRAME * 2) * (HAUS_FRAME * 2)
+        if len(daten) > n:
+            self.rest[g] = daten[n:]
+        q = self.puffer.setdefault(g, [])
+        for i in range(0, n, HAUS_FRAME * 2):
+            q.append(daten[i:i + HAUS_FRAME * 2])
+        if len(q) > 10:
+            del q[:len(q) - 10]
+
+    async def _takt(self) -> None:
+        import array
+        naechst = time.monotonic()
+        try:
+            while not self.aus:
+                naechst += HAUS_FRAME / HAUS_RATE
+                warte = naechst - time.monotonic()
+                if warte > 0:
+                    await asyncio.sleep(warte)
+                elif warte < -0.5:
+                    naechst = time.monotonic()
+                x = self.t.anrufe.get(self.aid)
+                self._zaehler = getattr(self, "_zaehler", 0) + 1
+                if x and self._zaehler % 50 == 0:   # 1x je Sekunde: Geräte ohne Lebenszeichen raus (sonst liefe der Mischer ewig)
+                    self.t._aufraeumen(x)
+                if not x or x.get("ende") or (x.get("angenommen") and not x.get("teil")):
+                    break
+                eigen: dict[str, array.array] = {}
+                summe = [0] * HAUS_FRAME
+                for g, q in self.puffer.items():
+                    if g not in x["teil"] or g in x.get("gesperrt", []):
+                        q.clear(); self.bereit[g] = False
+                        continue
+                    if not self.bereit.get(g):
+                        if len(q) < 3:
+                            continue
+                        self.bereit[g] = True
+                    if not q:
+                        self.bereit[g] = False
+                        continue
+                    f = array.array("h", q.pop(0))
+                    eigen[g] = f
+                    for i in range(HAUS_FRAME):
+                        summe[i] += f[i]
+                for g, r in list(self.hoerer.items()):
+                    e = eigen.get(g)
+                    werte = summe if e is None else [summe[i] - e[i] for i in range(HAUS_FRAME)]
+                    out = array.array("h", (32767 if v > 32767 else -32768 if v < -32768 else v for v in werte))
+                    try:
+                        await r.write(out.tobytes())
+                    except Exception:  # noqa: BLE001
+                        self.hoerer.pop(g, None)
+        finally:
+            self.stop()
+
+    def stop(self) -> None:
+        if self.aus:
+            return
+        self.aus = True
+        for r in self.hoerer.values():
+            with contextlib.suppress(Exception):
+                r.force_close()
+        self.hoerer.clear()
+        if self.t._haus.get(self.aid) is self:
+            self.t._haus.pop(self.aid, None)
+
+
+def _haus_pruefen(t: "Tuerklingel", q) -> tuple[str, str, dict | None]:
+    aid, g = q.get("id", ""), q.get("geraet", "")
+    x = t.anrufe.get(aid)
+    if not x or x.get("art") != "haus" or not secrets.compare_digest(x.get("schluessel", {}).get(g, "-"), q.get("schluessel", "")):
+        return aid, g, None
+    return aid, g, x
+
+
+class HausMikView(HomeAssistantView):
+    """Hausruf: Mikrofon eines Geräts, endloser POST mit 16-bit-PCM, 16 kHz, mono (little endian)."""
+
+    url = API + "/haus_mik"
+    name = "api:doorcall:haus_mik"
+    requires_auth = False
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+
+    async def post(self, request: web.Request) -> web.Response:
+        t: Tuerklingel = self.hass.data[DOMAIN + "_tuerklingel"]
+        aid, g, x = _haus_pruefen(t, request.query)
+        if x is None or g not in x.get("teil", {}):
+            return web.Response(status=403)
+        m = t.haus_mischer(aid)
+        _LOGGER.info("Hausruf %s: Mikro von %s verbunden", aid, g)
+        try:
+            while not m.aus:
+                d = await request.content.read(1280)
+                if not d:
+                    break
+                m.rein(g, d)
+        except Exception:  # noqa: BLE001
+            pass
+        return web.Response(status=200)
+
+
+class HausHoerView(HomeAssistantView):
+    """Hausruf: was dieses Gerät hört (alle anderen gemischt) - endlose 16-bit-PCM, 16 kHz, mono (little endian)."""
+
+    url = API + "/haus_hoeren"
+    name = "api:doorcall:haus_hoeren"
+    requires_auth = False
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+
+    async def get(self, request: web.Request) -> web.StreamResponse:
+        t: Tuerklingel = self.hass.data[DOMAIN + "_tuerklingel"]
+        aid, g, x = _haus_pruefen(t, request.query)
+        if x is None or g not in x.get("teil", {}):
+            return web.Response(status=403)
+        m = t.haus_mischer(aid)
+        r = web.StreamResponse(headers={"Content-Type": "application/octet-stream", "Cache-Control": "no-store"})
+        await r.prepare(request)
+        if (alt := m.hoerer.get(g)) is not None:
+            with contextlib.suppress(Exception):
+                alt.force_close()
+        m.hoerer[g] = r
+        _LOGGER.info("Hausruf %s: %s hört zu", aid, g)
+        while not m.aus and m.hoerer.get(g) is r:
+            await asyncio.sleep(0.5)
+        return r
 
 
 class MixView(HomeAssistantView):
@@ -926,7 +1138,7 @@ def ansichten(hass: HomeAssistant) -> None:
     if hass.data.get(DOMAIN + "_ansichten"):
         return
     hass.data[DOMAIN + "_ansichten"] = True
-    for v in (SignalView, BildView, MikView, MixView, AltSignalView, AltBildView, AltMikView):
+    for v in (SignalView, BildView, MikView, MixView, HausMikView, HausHoerView, AltSignalView, AltBildView, AltMikView):
         hass.http.register_view(v(hass))
 
 

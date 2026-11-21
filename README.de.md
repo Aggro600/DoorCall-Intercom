@@ -23,6 +23,17 @@ mit, werden dazugeholt oder ausgesperrt.
   - *Gemischt:* Jedes Gerät schickt sein Mikrofon an Home Assistant, HA mischt alle Stimmen und go2rtc spielt den
     Mix an der Tür ab. Mehrere können gleichzeitig reden; die Stimme kommt etwa 0,3–0,8 s später an.
   - Die Leitung kann einzelne Mikrofone sperren (nur zuhören).
+- **Hausruf – Gegensprechen in der Wohnung**, ganz ohne Klingel: Ein Gerät ruft andere Geräte, Gruppen oder alle.
+  Der Anrufer ist sofort drin, bei den anderen klingelt es mit „Tablet Wohnzimmer ruft“. Alle, die angenommen haben,
+  können gleichzeitig reden (Home Assistant mischt, jedes Gerät hört alle anderen). Starten aus der App
+  („Hausruf …“), per Dashboard-Knopf oder Automation mit der Aktion `doorcall.hausruf`:
+  ```yaml
+  action: doorcall.hausruf
+  data:
+    von: mobile_app_tablet_wohnzimmer   # wer ruft
+    an: ["alle"]                        # Geräte, "gruppe:<Name>" oder "alle"
+  ```
+  Damit das Gesprächsfenster sofort aufgeht, in der App „Fenster sofort zeigen erlauben“ antippen.
 - **Gruppen** (z. B. „Handys“, „Wohnung“) als Anrufziel und zum Dazuholen.
 - **Verpasste Anrufe, Verlauf** („Wer war da“ mit Fotos) und „Nicht stören“-Zeiten in der App.
 - Von unterwegs: über die externe Adresse von Home Assistant (Signal über HA; Bild/Ton brauchen den

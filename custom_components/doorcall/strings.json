@@ -6,6 +6,24 @@
         "description": "Doorbell rings become real calls on phones and tablets (app \"Türklingel\"). After setup, open \"DoorCall\" in the sidebar to set up doorbells, devices and groups."
       }
     },
-    "abort": {"single_instance_allowed": "DoorCall Intercom is already set up."}
+    "abort": {
+      "single_instance_allowed": "DoorCall Intercom is already set up."
+    }
+  },
+  "services": {
+    "hausruf": {
+      "name": "Intercom call",
+      "description": "One device calls other devices in the home (no doorbell). The caller answers right away and leads; the others ring.",
+      "fields": {
+        "von": {
+          "name": "From",
+          "description": "Calling device (notify service of the Home Assistant app, e.g. mobile_app_tablet_living_room)."
+        },
+        "an": {
+          "name": "To",
+          "description": "Devices, \"gruppe:<name>\" or \"alle\" (all devices with the app). Default: all."
+        }
+      }
+    }
   }
 }

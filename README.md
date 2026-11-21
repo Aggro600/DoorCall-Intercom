@@ -23,6 +23,16 @@ be brought in or locked out.
   - *Mixed:* every device sends its microphone to Home Assistant, HA mixes all voices and go2rtc plays the mix
     at the door. Several people can talk at once; the voice arrives about 0.3–0.8 s later.
   - The lead can lock single microphones (listen only).
+- **Intercom inside the home ("Hausruf")** – no doorbell involved: one device calls other devices, groups or
+  everyone. The caller is in right away, the others ring with "Living room tablet calls". Everyone who answered can
+  talk at the same time (Home Assistant mixes, each device hears all others). Start it from the app ("Hausruf …"),
+  from a dashboard button or an automation with the action `doorcall.hausruf`:
+  ```yaml
+  action: doorcall.hausruf
+  data:
+    von: mobile_app_tablet_living_room   # caller
+    an: ["alle"]                         # devices, "gruppe:<name>" or "alle"
+  ```
 - **Groups** (e.g. "Phones", "Flat") usable as call targets and for bringing people in.
 - **Missed calls, history** ("who was there" with photos) and "do not disturb" times in the app.
 - From outside your home: works through your Home Assistant external URL (signalling via HA; media needs

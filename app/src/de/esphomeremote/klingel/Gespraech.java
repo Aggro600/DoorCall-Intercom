@@ -498,7 +498,7 @@ public class Gespraech extends Activity {
         boolean etwas = leitungZeile.getChildCount() > 0 || schalterZeile.getChildCount() > 0 || antwortZeile.getChildCount() > 0 || extras.getChildCount() > 0;
         griff.setVisibility(etwas && Anruf.zustand != Anruf.AUS && klappRahmen.getVisibility() != View.VISIBLE ? View.VISIBLE : View.GONE);
         if (!etwas) blattSetzen(0);
-        else if (griff.getText().length() == 0) griff.setText("⌃  Schalter & Ansagen");
+        else griff.setText(Anruf.haus() ? "⌃  Gespräch" : "⌃  Schalter & Ansagen");
     }
 
     private TextView text(int sp, int farbe) {
@@ -565,9 +565,10 @@ public class Gespraech extends Activity {
                 statusZeigen(Anruf.cfg);
                 h.removeCallbacks(statusHolen);
                 h.postDelayed(statusHolen, 4000);
-                status.setText("klingelt …");
+                status.setText(Anruf.haus() ? Anruf.cfg.optString("hinweis", "Hausruf") : "klingelt …");
                 stumm = true;
-                videoStarten(false);
+                if (Anruf.haus()) web.setVisibility(View.INVISIBLE);   // Hausruf: kein Bild
+                else { web.setVisibility(View.VISIBLE); videoStarten(false); }
             } else if (z == Anruf.AKTIV) {
                 knopfMikro = knopf(R.drawable.ic_mic, "Mikrofon", KACHEL, 60, v -> stummSchalten());
                 leiste.addView(knopfMikro);
@@ -581,6 +582,8 @@ public class Gespraech extends Activity {
                 h.removeCallbacks(statusHolen);
                 h.postDelayed(statusHolen, 2000);
                 modus = Anruf.cfg.optString("modus", "einer");   // Sprechen-Modus der Klingel (HA), später aus der Runde
+                if (Anruf.haus()) { web.setVisibility(View.INVISIBLE); stumm = HausAudio.stumm; mitMikro = true; }
+                else web.setVisibility(View.VISIBLE);
                 aktivSeit = System.currentTimeMillis();
                 mikBereit = Anruf.cfg.optString("api").isEmpty();   // nur DoorCall meldet den Rückkanal; älteres HA: gleich bereit
                 if (!mitMikro) videoStarten(true);
@@ -595,6 +598,7 @@ public class Gespraech extends Activity {
                 leitungZeile.removeAllViews();
                 leitungSchluessel = "";
                 mikHochStoppen();
+                mitMikro = false;
                 wunschGesetzt = false;
                 rundeZeile.setVisibility(View.GONE);
                 tuerOben.setVisibility(View.GONE);
@@ -644,6 +648,7 @@ public class Gespraech extends Activity {
 
     private void stummSchalten() {
         stumm = !stumm;
+        if (Anruf.haus()) HausAudio.stumm = stumm;
         js("stumm(" + stumm + ")");
         zustandZeigen();
         if (!stumm && !mikBereit) hinweis("Verbindung zur Tür baut sich noch auf – gleich hört man dich");
@@ -757,7 +762,8 @@ public class Gespraech extends Activity {
         TextView m = text(15, frei ? Color.WHITE : SCHRIFT);
         m.setGravity(Gravity.CENTER_VERTICAL);
         m.setMaxLines(2);
-        m.setText((frei ? "●  " : "○  ") + (frei ? "Mitschauen erlaubt" : "Mitschauen gesperrt"));
+        m.setText((frei ? "●  " : "○  ") + (Anruf.haus() ? (frei ? "Dazukommen erlaubt" : "Dazukommen gesperrt")
+                : (frei ? "Mitschauen erlaubt" : "Mitschauen gesperrt")));
         m.setPadding(dp(12), dp(12), dp(8), dp(12));
         m.setMinHeight(dp(52));
         GradientDrawable mg = kachel(frei ? BLAU : KACHEL, frei ? BLAU_HELL : RAND);
@@ -800,7 +806,7 @@ public class Gespraech extends Activity {
         sm.setMinHeight(dp(52));
         sm.setBackground(kachel(KACHEL, RAND));
         sm.setOnClickListener(v -> modusWaehlen());
-        reihe2.addView(sm, new LinearLayout.LayoutParams(0, -2, 1));
+        if (!Anruf.haus()) reihe2.addView(sm, new LinearLayout.LayoutParams(0, -2, 1));   // Hausruf: alle sprechen immer gemischt
         TextView ms = text(15, SCHRIFT);
         ms.setGravity(Gravity.CENTER_VERTICAL);
         ms.setMaxLines(2);
@@ -813,7 +819,7 @@ public class Gespraech extends Activity {
         ms.setAlpha(n > 1 ? 1f : 0.5f);
         ms.setOnClickListener(v -> mikrosSperren(t));
         LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(0, -2, 1);
-        ml.leftMargin = dp(8);
+        ml.leftMargin = Anruf.haus() ? 0 : dp(8);
         reihe2.addView(ms, ml);
         leitungZeile.addView(reihe2, new LinearLayout.LayoutParams(rl));
         griffPruefen();
