@@ -272,11 +272,26 @@ class Tuerklingel:
     def alle_handy_geraete(self) -> list[str]:
         return sorted(s for s in self.hass.services.async_services().get("notify", {}) if s.startswith("mobile_app_"))
 
+    def freigabe(self) -> dict:
+        """Welche Geräte DoorCall nutzen dürfen (Nutzer 2026-11-21: "mehr Kontrolle"):
+        modus "auswahl" (nur angehakte), "alle" (jedes Gerät mit Home-Assistant-App), "aus" (keine automatische Einrichtung)."""
+        f = self.daten.setdefault("freigabe", {"modus": "auswahl", "geraete": list(self.daten.get("app_geraete") or [])})
+        f.setdefault("modus", "auswahl")
+        f.setdefault("geraete", [])
+        return f
+
+    def erlaubt(self, g: str) -> bool:
+        f = self.freigabe()
+        return f["modus"] == "alle" or g in f["geraete"]
+
     async def einrichten(self, nur: list[str] | None = None, alle: bool = False) -> list[str]:
         """Stiller Gruß an Geräte, deren Türklingel-App HA noch nicht kennt: Adressen, KEIN Klingeln. Ist die App da,
         speichert sie die Einstellungen und antwortet mit "hallo" -> Gerät ist bekannt (Probeanruf/Hausruf gehen)."""
         bekannt = set(self.daten.get("app_geraete") or [])
-        ziele = [g for g in (nur or self.alle_handy_geraete()) if alle or g not in bekannt]
+        f = self.freigabe()
+        if f["modus"] == "aus" and not nur:
+            return []
+        ziele = [g for g in (nur or self.alle_handy_geraete()) if (alle or g not in bekannt) and self.erlaubt(g)]
         if not ziele:
             return []
         kl = self.daten.get("klingeln") or []
@@ -332,7 +347,7 @@ class Tuerklingel:
         for gr in self.gruppen():
             bekannt.update(gr["geraete"])
         alle = set(s for s in self.hass.services.async_services().get("notify", {}) if s.startswith("mobile_app_"))
-        return sorted(bekannt & alle, key=self.name)
+        return sorted((g for g in bekannt & alle if self.erlaubt(g)), key=self.name)
 
     def _app_merken(self, g: str) -> None:
         l = self.daten.setdefault("app_geraete", [])
@@ -493,6 +508,9 @@ class Tuerklingel:
         aktion, aid, geraet = str(j.get("tuerklingel") or ""), str(j.get("id") or ""), str(j.get("geraet") or "")
         antwort = lambda ok, text: web.json_response({"ok": ok, "text": text})  # noqa: E731
         if aktion == "hallo":   # App hat die stille Einrichtung bekommen (oder startet neu) -> Gerät mit App
+            if not self.erlaubt(geraet):
+                _LOGGER.info("DoorCall: %s hat die App, ist aber nicht freigegeben", geraet)
+                return antwort(False, "Gerät in DoorCall nicht freigegeben")
             if re.fullmatch(r"mobile_app_[a-z0-9_]+", geraet) and geraet in self.alle_handy_geraete():
                 neu = geraet not in (self.daten.get("app_geraete") or [])
                 self._app_merken(geraet)

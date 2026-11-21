@@ -42,6 +42,7 @@ class DoorCallPanel extends HTMLElement {
 
   _zeigen() {
     const k = this.d.klingeln, grs = this.info.gruppen || [];
+    const fg = this.info.freigabe || { modus: "auswahl", geraete: [] };
     const geraete = [...new Set([...(this.info.geraete || []), ...k.flatMap((x) => x.anruf?.geraete || [])])];
     this.innerHTML = `<style>
       :host, doorcall-panel { display:block; }
@@ -70,13 +71,19 @@ class DoorCallPanel extends HTMLElement {
       <div class="note" style="margin-bottom:12px">Klingeln an der Tür kommt als echter Anruf auf Handys und Tablets (App „Türklingel“ und Home-Assistant-App nötig).
         Nach dem Annehmen: Live-Bild, Gegensprechen über go2rtc, Tür öffnen, Schalter und Ansagen. Mehrere Geräte bilden eine Gesprächsrunde.</div>
       ${this.msg ? `<div class="msg ${this.msgErr ? "err" : ""}">${esc(this.msg)}</div>` : ""}
-      <div class="karte"><h2><ha-icon icon="mdi:cellphone-check"></ha-icon>Geräte mit der App</h2>
-        <div class="zeile">${(this.info.app || []).length ? (this.info.app || []).map((g) => `<span>✓ ${esc(this._gname(g))}</span>`).join("")
-          : `<span class="note">Noch keins.</span>`}</div>
-        <div class="note">Neue Geräte richten sich von selbst ein: DoorCall schickt jedem Handy/Tablet mit Home-Assistant-App einen stillen Gruß
-          (es klingelt nicht). Ist die App „Türklingel“ installiert, meldet sie sich und erscheint hier – danach gehen Probeanruf und Hausruf.
-          Automatisch beim Start, bei neuen Geräten binnen 10 Minuten und alle 6 Stunden.</div>
-        <div class="zeile"><button class="ghost" data-a="suchen"><ha-icon icon="mdi:magnify"></ha-icon>Jetzt Geräte suchen</button></div>
+      <div class="karte"><h2><ha-icon icon="mdi:cellphone-check"></ha-icon>Geräte für DoorCall</h2>
+        <div class="zeile"><label>Einrichtung <select data-fg="modus">
+          <option value="auswahl" ${fg.modus === "auswahl" ? "selected" : ""}>Nur ausgewählte Geräte</option>
+          <option value="alle" ${fg.modus === "alle" ? "selected" : ""}>Alle Geräte automatisch</option>
+          <option value="aus" ${fg.modus === "aus" ? "selected" : ""}>Aus</option></select></label></div>
+        <div class="note erkl">${fg.modus === "alle"
+          ? "<b>Alle automatisch:</b> Jedes Handy/Tablet mit Home-Assistant-App bekommt einen stillen Gruß (es klingelt nicht). Hat es die App „Türklingel“, ist es danach dabei (Probeanruf, Hausruf, Dazuholen)."
+          : fg.modus === "aus"
+          ? "<b>Aus:</b> Es wird kein Gerät mehr eingerichtet und keins nimmt neu teil – nur die angehakten Geräte bleiben nutzbar."
+          : "<b>Nur ausgewählte:</b> Nur angehakte Geräte bekommen den stillen Gruß und dürfen DoorCall nutzen. Andere werden abgewiesen, auch wenn sie die App haben, und tauchen nirgends auf (auch nicht beim Hausruf)."}
+          ✓ = App verbunden.</div>
+        <div class="zeile">${geraete.map((g) => `<label><input type="checkbox" data-fg="geraet" data-g="${esc(g)}" ${fg.modus === "alle" || (fg.geraete || []).includes(g) ? "checked" : ""} ${fg.modus === "alle" ? "disabled" : ""}>${esc(this._gname(g))}${(this.info.verbunden || []).includes(g) ? " ✓" : ""}</label>`).join("")}</div>
+        <div class="zeile"><button class="ghost" data-a="suchen" ${fg.modus === "aus" ? "disabled" : ""}><ha-icon icon="mdi:magnify"></ha-icon>Jetzt Geräte suchen</button></div>
       </div>
       ${k.map((x, ki) => this._klingel(x, ki, geraete, grs)).join("")}
       ${k.length < 8 ? `<button class="ghost" data-a="add"><ha-icon icon="mdi:plus"></ha-icon>Klingel hinzufügen</button>` : ""}
@@ -159,6 +166,17 @@ class DoorCallPanel extends HTMLElement {
 
   async _aenderung(e) {
     const t = e.target, ki = Number(t.dataset.ki), k = this.d.klingeln[ki];
+    if (t.dataset.fg) {   // Freigabe der Geräte (doorcall/freigabe)
+      const fg = this.info.freigabe ||= { modus: "auswahl", geraete: [] };
+      if (t.dataset.fg === "modus") fg.modus = t.value;
+      else { fg.geraete = (fg.geraete || []).filter((x) => x !== t.dataset.g); if (t.checked) fg.geraete.push(t.dataset.g); }
+      try { const r = await this._hass.callWS({ type: "doorcall/freigabe", modus: fg.modus, geraete: fg.geraete });
+        this.info.freigabe = r.freigabe;
+        this.msg = r.gefragt.length ? `Eingerichtet wird: ${r.gefragt.map((g) => this._gname(g)).join(", ")}` : ""; this.msgErr = false;
+        setTimeout(async () => { try { this.info = await this._hass.callWS({ type: "doorcall/info" }); this._zeigen(); } catch (x) { /* egal */ } }, 8000); }
+      catch (err) { this.msg = "Freigabe: " + (err.message || err); this.msgErr = true; }
+      return this._zeigen();
+    }
     if (t.dataset.k) { k[t.dataset.k] = t.value.trim(); return this._speichern(); }
     if (t.dataset.gr) {
       const gr = (this.info.gruppen || [])[Number(t.dataset.gi)]; if (!gr) return;

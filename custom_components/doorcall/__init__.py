@@ -30,7 +30,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.4"
+VERSION_JS = "2026.11.22.5"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -132,6 +132,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     daten.setdefault("klingeln", [])
     daten.setdefault("gruppen", [])
     t = Tuerklingel(hass, store, daten)
+    if "freigabe" not in daten:   # 2026-11-21: Freigabe einführen - bisher verbundene Geräte bleiben freigegeben
+        t.freigabe()
+        await store.async_save(daten)
     hass.data[DOMAIN + "_tuerklingel"] = t
     aus = Ausloeser(hass, t)
     aus.starten()
@@ -139,7 +142,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ansichten(hass)
     if not hass.data.get(DOMAIN + "_ws"):
         hass.data[DOMAIN + "_ws"] = True
-        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen):
+        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen, ws_freigabe):
             websocket_api.async_register_command(hass, fn)
     await _panel(hass)
     _einrichten_planen(hass, entry, t)
@@ -245,7 +248,8 @@ def ws_info(hass, connection, msg) -> None:
     t = _t(hass)
     geraete = sorted(s for s in hass.services.async_services().get("notify", {}) if s.startswith("mobile_app_"))
     connection.send_result(msg["id"], {"geraete": geraete, "go2rtc": _go2rtc_vorschlag(hass), "namen": t.namen(),
-                                       "gruppen": t.gruppen(), "app": t.app_geraete()})
+                                       "gruppen": t.gruppen(), "app": t.app_geraete(), "freigabe": t.freigabe(),
+                                       "verbunden": list(t.daten.get("app_geraete") or [])})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "doorcall/test", vol.Required("kid"): str,
@@ -268,3 +272,20 @@ async def ws_suchen(hass, connection, msg) -> None:
     """Knopf "Geräte suchen": allen Handys ohne bekannte App die Einrichtung schicken."""
     nur = [msg["geraet"]] if msg.get("geraet") else None
     connection.send_result(msg["id"], {"gefragt": await _t(hass).einrichten(nur, alle=bool(msg.get("alle")))})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "doorcall/freigabe", vol.Required("modus"): vol.In(["auswahl", "alle", "aus"]),
+                                  vol.Required("geraete"): [vol.Match(r"^mobile_app_[a-z0-9_]+$")]})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_freigabe(hass, connection, msg) -> None:
+    """Freigabe speichern; neu angehakte Geräte gleich einrichten."""
+    t = _t(hass)
+    alt = set(t.freigabe()["geraete"])
+    t.daten["freigabe"] = {"modus": msg["modus"], "geraete": list(dict.fromkeys(msg["geraete"]))[:32]}
+    await t.store.async_save(t.daten)
+    neu = [g for g in t.daten["freigabe"]["geraete"] if g not in alt]
+    gefragt = await t.einrichten(neu, alle=True) if neu else []
+    if msg["modus"] == "alle":
+        gefragt += await t.einrichten()
+    connection.send_result(msg["id"], {"freigabe": t.freigabe(), "gefragt": gefragt})

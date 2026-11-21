@@ -52,7 +52,7 @@ mit, werden dazugeholt oder ausgesperrt.
 1. HACS → Integrationen → ⋮ → Benutzerdefinierte Repositories → `https://github.com/Aggro600/DoorCall-Intercom`,
    Typ *Integration* → **DoorCall Intercom** installieren → Home Assistant neu starten.
 2. Einstellungen → Geräte & Dienste → Integration hinzufügen → **DoorCall Intercom**.
-3. Die App „Türklingel“ auf den Handys/Tablets installieren – sie richten sich von selbst ein (DoorCall schickt jedem Gerät mit Home-Assistant-App einen stillen Gruß; es klingelt nicht). Kontrolle unter **DoorCall › Geräte mit der App** oder „Jetzt Geräte suchen“.
+3. Die App „Türklingel“ auf den Handys/Tablets installieren und sie unter **DoorCall › Geräte für DoorCall** anhaken – sie richten sich dann von selbst ein (stiller Gruß, es klingelt nicht). Standard „Nur ausgewählte Geräte“: andere Handys werden nie angesprochen und auch mit App abgewiesen. Alternativ „Alle Geräte automatisch“ oder „Aus“.
 4. In der Seitenleiste **DoorCall** öffnen: Klingel anlegen (Auslöser, Kamera), Geräte anhaken, go2rtc-Adresse und
    Stream eintragen, optional Türöffner, Schalter, Schnellantworten. **Probeanruf** drücken.
 
