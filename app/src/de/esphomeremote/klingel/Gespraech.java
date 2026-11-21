@@ -56,6 +56,10 @@ public class Gespraech extends Activity {
     private String leitungSchluessel = "";
     private long sprechenSeit;
     private boolean wunschGesetzt;
+    private LinearLayout hausMitte;
+    private TextView hausText, hausUnter, hausNochmal;
+    private long alleinSeit;
+    private org.json.JSONArray nochmalIds;
     private boolean mikBereit = true;   // Rückkanal zur Tür steht (HA fragt go2rtc); vorher "Startet …" am Mikro-Knopf
     private long aktivSeit;
     private android.os.PowerManager.WakeLock wach;   // über dem Sperrbildschirm greift FLAG_KEEP_SCREEN_ON nicht (10-s-Abschaltung)
@@ -212,6 +216,26 @@ public class Gespraech extends Activity {
         FrameLayout haupt = new FrameLayout(this);
         haupt.setBackgroundColor(Color.BLACK);
         haupt.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        // Hausruf: Mitte statt Video - wer ist dabei, bei wem klingelt es, oder groß "Du bist allein" (2026-11-21)
+        hausMitte = new LinearLayout(this);
+        hausMitte.setOrientation(LinearLayout.VERTICAL);
+        hausMitte.setGravity(Gravity.CENTER);
+        hausMitte.setPadding(dp(24), dp(24), dp(24), dp(24));
+        hausMitte.setVisibility(View.GONE);
+        hausText = text(30, SCHRIFT);
+        hausMitte.addView(hausText, new LinearLayout.LayoutParams(-2, -2));
+        hausUnter = text(18, GRAU);
+        hausUnter.setPadding(0, dp(12), 0, dp(20));
+        hausMitte.addView(hausUnter, new LinearLayout.LayoutParams(-2, -2));
+        hausNochmal = text(18, Color.WHITE);
+        hausNochmal.setText("📞  Nochmal rufen");
+        hausNochmal.setPadding(dp(28), dp(16), dp(28), dp(16));
+        hausNochmal.setBackground(kachel(BLAU, BLAU_HELL));
+        hausNochmal.setVisibility(View.GONE);
+        hausNochmal.setOnClickListener(v -> nochmalRufen());
+        hausMitte.addView(hausNochmal, new LinearLayout.LayoutParams(-2, -2));
+        FrameLayout.LayoutParams hm = new FrameLayout.LayoutParams(-1, -1);
+        haupt.addView(hausMitte, hm);
 
         // Kopf-Karte
         oben = new LinearLayout(this);
@@ -567,8 +591,10 @@ public class Gespraech extends Activity {
                 h.postDelayed(statusHolen, 4000);
                 status.setText(Anruf.haus() ? Anruf.cfg.optString("hinweis", "Hausruf") : "klingelt …");
                 stumm = true;
-                if (Anruf.haus()) web.setVisibility(View.INVISIBLE);   // Hausruf: kein Bild
-                else { web.setVisibility(View.VISIBLE); videoStarten(false); }
+                if (Anruf.haus()) {   // Hausruf: kein Bild, groß wer ruft
+                    web.setVisibility(View.INVISIBLE);
+                    hausZeigen("📞  " + Anruf.cfg.optString("von_name", "Hausruf"), "ruft dich", SCHRIFT, false);
+                } else { hausMitte.setVisibility(View.GONE); web.setVisibility(View.VISIBLE); videoStarten(false); }
             } else if (z == Anruf.AKTIV) {
                 knopfMikro = knopf(R.drawable.ic_mic, "Mikrofon", KACHEL, 60, v -> stummSchalten());
                 leiste.addView(knopfMikro);
@@ -582,8 +608,10 @@ public class Gespraech extends Activity {
                 h.removeCallbacks(statusHolen);
                 h.postDelayed(statusHolen, 2000);
                 modus = Anruf.cfg.optString("modus", "einer");   // Sprechen-Modus der Klingel (HA), später aus der Runde
-                if (Anruf.haus()) { web.setVisibility(View.INVISIBLE); stumm = HausAudio.stumm; mitMikro = true; }
-                else web.setVisibility(View.VISIBLE);
+                if (Anruf.haus()) {
+                    web.setVisibility(View.INVISIBLE); stumm = HausAudio.stumm; mitMikro = true; alleinSeit = 0;
+                    hausZeigen("🔊  Hausruf", "verbinde …", SCHRIFT, false);
+                } else { hausMitte.setVisibility(View.GONE); web.setVisibility(View.VISIBLE); }
                 aktivSeit = System.currentTimeMillis();
                 mikBereit = Anruf.cfg.optString("api").isEmpty();   // nur DoorCall meldet den Rückkanal; älteres HA: gleich bereit
                 if (!mitMikro) videoStarten(true);
@@ -599,6 +627,7 @@ public class Gespraech extends Activity {
                 leitungSchluessel = "";
                 mikHochStoppen();
                 mitMikro = false;
+                if (hausMitte != null) hausNochmal.setVisibility(View.GONE);
                 wunschGesetzt = false;
                 rundeZeile.setVisibility(View.GONE);
                 tuerOben.setVisibility(View.GONE);
@@ -729,6 +758,7 @@ public class Gespraech extends Activity {
             zustandZeigen();
             hinweis(sprecher + " spricht – du bist stumm");
         }
+        if (Anruf.haus()) hausRunde(r, t, n);
         StringBuilder sb = new StringBuilder();
         if (n > 1) {
             sb.append("Mit dabei: ");
@@ -823,6 +853,60 @@ public class Gespraech extends Activity {
         reihe2.addView(ms, ml);
         leitungZeile.addView(reihe2, new LinearLayout.LayoutParams(rl));
         griffPruefen();
+    }
+
+    private void hausZeigen(String gross, String klein, int farbe, boolean nochmal) {
+        hausMitte.setVisibility(View.VISIBLE);
+        hausText.setText(gross);
+        hausText.setTextColor(farbe);
+        hausUnter.setText(klein);
+        hausNochmal.setVisibility(nochmal ? View.VISIBLE : View.GONE);
+    }
+
+    /** Hausruf: wer ist dabei / klingelt noch / allein - allein: groß gelb, Ton, nach 30 s automatisch auflegen. */
+    private void hausRunde(JSONObject r, org.json.JSONArray t, int n) {
+        StringBuilder mit = new StringBuilder();
+        for (int i = 0; t != null && i < t.length(); i++) {
+            JSONObject x = t.optJSONObject(i);
+            if (x == null || x.optBoolean("ich")) continue;
+            mit.append(mit.length() > 0 ? ", " : "").append(x.optString("name"));
+        }
+        nochmalIds = r.optJSONArray("nochmal");
+        org.json.JSONArray kl = r.optJSONArray("klingelt"), weg = r.optJSONArray("weg");
+        if (mit.length() > 0) {
+            alleinSeit = 0;
+            hausZeigen("🔊  Hausruf", "Mit dabei: " + mit, SCHRIFT, false);
+        } else if (kl != null && kl.length() > 0) {
+            alleinSeit = 0;
+            hausZeigen("📞  Klingelt …", "bei " + liste(kl), SCHRIFT, false);
+        } else {
+            if (alleinSeit == 0) {
+                alleinSeit = System.currentTimeMillis();
+                try { new android.media.ToneGenerator(android.media.AudioManager.STREAM_VOICE_CALL, 70)
+                        .startTone(android.media.ToneGenerator.TONE_PROP_PROMPT, 600); } catch (Exception ignored) {}
+            }
+            long rest = 30 - (System.currentTimeMillis() - alleinSeit) / 1000;
+            if (rest <= 0) { Anruf.auflegen(this); return; }
+            String grund = weg != null && weg.length() > 0 ? liste(weg) + (weg.length() > 1 ? " haben" : " hat") + " aufgelegt"
+                    : "Niemand hat angenommen";
+            hausZeigen("Du bist allein im Gespräch", grund + "\nLegt in " + rest + " s automatisch auf",
+                    GELB, nochmalIds != null && nochmalIds.length() > 0);
+        }
+    }
+
+    private static String liste(org.json.JSONArray a) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < a.length(); i++) b.append(i > 0 ? ", " : "").append(a.optString(i));
+        return b.toString();
+    }
+
+    private void nochmalRufen() {
+        if (nochmalIds == null || nochmalIds.length() == 0) return;
+        JSONObject z = new JSONObject();
+        try { z.put("ziele", nochmalIds); } catch (Exception ignored) {}
+        alleinSeit = 0;
+        hausZeigen("📞  Klingelt …", "rufe nochmal an", SCHRIFT, false);
+        Anruf.abfragen("einladen", -1, z, rr -> hinweis(rr == null ? "Keine Verbindung" : rr.optString("text")));
     }
 
     /** Leitung wählt, wie mehrere sprechen - immer mit Erklärung (Nutzer 2026-11-21). */

@@ -340,6 +340,8 @@ class Tuerklingel:
             self._raus(x, g)
 
     def _raus(self, x: dict, g: str, nachfolger: str = "") -> None:
+        if g in x["teil"] and g not in x.setdefault("weg", []):
+            x["weg"].append(g)   # für "… hat aufgelegt" bei denen, die bleiben
         x["teil"].pop(g, None)
         if x["sprecher"] == g:
             x["sprecher"] = ""
@@ -380,6 +382,8 @@ class Tuerklingel:
              "grund": (x.get("grund") or {}).get(g, ""),
              "modus": x.get("modus", "einer"), "gesperrt": g in x.get("gesperrt", []),
              "mik_bereit": x.get("rk", True),
+             "klingelt": self._klingelt(x), "weg": [self.name(y) for y in x.get("weg", []) if y not in x["teil"]],
+             "nochmal": [y for y in x["geraete"] if y not in x["teil"] and y != g],
              "sprecher_liste": [self.name(y) for y in x.get("sprecher_set", []) if y in x["teil"]]}
         for t in r["teilnehmer"]:
             t["gesperrt"] = t["g"] in x.get("gesperrt", [])
@@ -388,6 +392,15 @@ class Tuerklingel:
             r["einladbar"] = [{"id": f"gruppe:{gr['name']}", "name": f"Gruppe {gr['name']}"} for gr in self.gruppen()
                               if set(gr["geraete"]) - weg] + [{"id": y, "name": self.name(y)} for y in self.app_geraete() if y not in weg]
         return r
+
+    def _klingelt(self, x: dict) -> list[str]:
+        """Bei wem es (vermutlich) noch klingelt: eingeladen/angerufen, nicht drin, nicht abgelehnt, nicht gegangen."""
+        jetzt, dauer = time.time(), (45 if x.get("art") == "haus" else 120) + 5
+        seit = x.get("klingel_seit", {})
+        return [self.name(g) for g in x["geraete"]
+                if g not in x["teil"] and g not in x.get("abgesagt", []) and g not in x.get("weg", [])
+                and (x.get("art") == "haus" or g in x.get("eingeladen", []))
+                and jetzt - seit.get(g, x["start"]) < dauer]
 
     async def _angebot(self, x: dict, aid: str, an: list[str]) -> None:
         """Klingeln beenden und (wenn Mitschauen frei) "Gespräch läuft – mitschauen" anbieten."""
@@ -415,6 +428,11 @@ class Tuerklingel:
                 x["geraete"].append(g)
             if g not in x["eingeladen"]:
                 x["eingeladen"].append(g)
+            x.setdefault("klingel_seit", {})[g] = time.time()
+            if g in x.get("abgesagt", []):
+                x["abgesagt"].remove(g)
+            if g in x.get("weg", []):
+                x["weg"].remove(g)
             await self._senden(g, "KLINGELN", self._payload(aid, g, hinweis=f"{von} holt dich dazu", eingeladen=True))
         _LOGGER.info("Türklingel: %s holt %s dazu", x["von"], ", ".join(neu))
         return True, "Klingelt bei " + ", ".join(self.name(g) for g in neu)
@@ -507,6 +525,9 @@ class Tuerklingel:
                 _LOGGER.info("Türklingel: %s kommt als Gast dazu (Leitung %s)", geraet, x["von"])
                 return web.json_response({"ok": True, "text": f"Mit dabei – {self.name(x['von'])} leitet", "rolle": "gast"})
             return antwort(False, "Mitschauen ist gesperrt")
+        elif aktion in ("abgelehnt", "verpasst"):
+            if geraet not in x.setdefault("abgesagt", []):
+                x["abgesagt"].append(geraet)
         elif aktion == "aufgelegt":
             if geraet in x["teil"]:
                 if geraet == x["von"] and len(x["teil"]) > 1 and j.get("alle"):
