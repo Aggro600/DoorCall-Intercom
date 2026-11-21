@@ -110,6 +110,28 @@ public class Start extends Activity {
         knopf("Lautstärketasten im Gespräch: " + (medien ? "Medien-Lautstärke" : "Anruf-Lautstärke (Medien folgt)") + "  ⇄", () -> {
             Anruf.prefs(this).edit().putString("ton_kanal", medien ? "anruf" : "medien").apply(); zeigen();
         });
+        // Sprechen mit mehreren Geräten (2026-11-21): eigener Standard, gilt wenn dieses Gerät das Gespräch leitet
+        String sp = Anruf.prefs(this).getString("sprechen", "ha");
+        knopf("Sprechen mit mehreren: " + ("einer".equals(sp) ? "immer nur einer (schnell)" : "gemischt".equals(sp)
+                ? "alle gleichzeitig (gemischt)" : "wie in Home Assistant") + " …", () -> {
+            final String[] werte = {"ha", "einer", "gemischt"};
+            String[] namen = {"Wie in Home Assistant eingestellt", "Immer nur einer (schnell)", "Alle gleichzeitig (gemischt)"};
+            int akt = java.util.Arrays.asList(werte).indexOf(sp);
+            new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Wie sollen mehrere sprechen?")
+                    .setSingleChoiceItems(namen, Math.max(0, akt), (d, w) -> {
+                        Anruf.prefs(this).edit().putString("sprechen", werte[w]).apply();
+                        d.dismiss();
+                        zeigen();
+                    })
+                    .setMessage(null)
+                    .setNegativeButton("Abbrechen", null)
+                    .show();
+        });
+        zeile("Schnell: Dein Mikrofon geht direkt an die Tür, kaum Verzögerung – es spricht immer nur einer, wer sein "
+                + "Mikrofon anmacht, schaltet den vorigen stumm. Gemischt: Home Assistant mischt alle Mikrofone, mehrere können "
+                + "gleichzeitig reden, die Stimme kommt aber etwa 0,3–0,8 s später draußen an. Gilt, wenn du das Gespräch "
+                + "leitest; im Gespräch kannst du jederzeit umstellen.", 13, Gespraech.GRAU);
         int ks = Anruf.prefs(this).getInt("klingel_s", 0);
         knopf("Klingeln: " + (ks > 0 ? ks + " Sekunden" : "wie in Home Assistant (" + Anruf.letzter(this).optInt("dauer", 30) + " s)") + " …", () -> {
             final int[] werte = {0, 15, 20, 30, 45, 60, 90, 120};

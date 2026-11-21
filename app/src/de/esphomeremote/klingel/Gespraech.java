@@ -55,6 +55,7 @@ public class Gespraech extends Activity {
     private LinearLayout leitungZeile;
     private String leitungSchluessel = "";
     private long sprechenSeit;
+    private boolean wunschGesetzt;
     private android.os.PowerManager.WakeLock wach;   // über dem Sperrbildschirm greift FLAG_KEEP_SCREEN_ON nicht (10-s-Abschaltung)
     private final Runnable statusHolen = this::statusHolen;
     private long hinweisBis;
@@ -590,6 +591,7 @@ public class Gespraech extends Activity {
                 leitungZeile.removeAllViews();
                 leitungSchluessel = "";
                 mikHochStoppen();
+                wunschGesetzt = false;
                 rundeZeile.setVisibility(View.GONE);
                 tuerOben.setVisibility(View.GONE);
                 tuerKlappe.setVisibility(View.GONE);
@@ -682,6 +684,12 @@ public class Gespraech extends Activity {
             try { e.put("id", Anruf.id()).put("alle", true).put("grund", r.optString("grund")); } catch (Exception ignored) {}
             Anruf.vonAussenBeenden(this, e);
             return;
+        }
+        // Eigener Standard aus den App-Einstellungen: leite ich, stelle ich einmal auf meinen Wunsch-Modus um
+        String wunsch = Anruf.prefs(this).getString("sprechen", "ha");
+        if (!wunschGesetzt && r.optBoolean("ich_leite") && !"ha".equals(wunsch)) {
+            wunschGesetzt = true;
+            if (!wunsch.equals(r.optString("modus", "einer"))) modusSetzen(wunsch);
         }
         String neuModus = r.optString("modus", "einer");
         if (!neuModus.equals(modus)) {   // Leitung hat umgestellt: WebRTC neu aufbauen (Mikro direkt oder über den Mischer)

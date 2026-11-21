@@ -410,6 +410,8 @@ class Tuerklingel:
                 x["angenommen"], x["von"] = jetzt, geraet
                 x["teil"][geraet] = {"seit": jetzt, "zuletzt": jetzt}
                 await self.beenden(aid, ausser=geraet)
+                if x.get("modus") == "gemischt":   # Rückkanal schon jetzt öffnen (go2rtc braucht dafür einige Sekunden)
+                    self.mischer(aid)._play()
                 return web.json_response({"ok": True, "text": "", "rolle": "leiter"})
             if geraet in x["teil"]:
                 return web.json_response({"ok": True, "text": "", "rolle": "leiter" if geraet == x["von"] else "gast"})
@@ -473,6 +475,8 @@ class Tuerklingel:
                         x["modus"], x["sprecher"], x["sprecher_set"] = neu, "", []
                         if neu == "einer":
                             self.mischer_stop(aid)
+                        else:
+                            self.mischer(aid)._play()
                         _LOGGER.info("Türklingel: %s stellt Sprechen auf %s", geraet, neu)
                     text = "Alle dürfen gleichzeitig sprechen (gemischt)" if neu == "gemischt" else "Immer nur einer spricht"
                 elif aktion == "mik_sperren":
