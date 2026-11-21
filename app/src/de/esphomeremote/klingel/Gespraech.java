@@ -56,6 +56,8 @@ public class Gespraech extends Activity {
     private String leitungSchluessel = "";
     private long sprechenSeit;
     private boolean wunschGesetzt;
+    private boolean mikBereit = true;   // Rückkanal zur Tür steht (HA fragt go2rtc); vorher "Startet …" am Mikro-Knopf
+    private long aktivSeit;
     private android.os.PowerManager.WakeLock wach;   // über dem Sperrbildschirm greift FLAG_KEEP_SCREEN_ON nicht (10-s-Abschaltung)
     private final Runnable statusHolen = this::statusHolen;
     private long hinweisBis;
@@ -579,6 +581,8 @@ public class Gespraech extends Activity {
                 h.removeCallbacks(statusHolen);
                 h.postDelayed(statusHolen, 2000);
                 modus = Anruf.cfg.optString("modus", "einer");   // Sprechen-Modus der Klingel (HA), später aus der Runde
+                aktivSeit = System.currentTimeMillis();
+                mikBereit = Anruf.cfg.optString("api").isEmpty();   // nur DoorCall meldet den Rückkanal; älteres HA: gleich bereit
                 if (!mitMikro) videoStarten(true);
                 uhr();
             } else {
@@ -609,7 +613,10 @@ public class Gespraech extends Activity {
             }
         }
         if (z == Anruf.AKTIV) {
-            knopfSetzen(knopfMikro, stumm ? R.drawable.ic_mic_aus : R.drawable.ic_mic, stumm ? "Stumm" : "Mikrofon",
+            if (!mikBereit && System.currentTimeMillis() - aktivSeit > 20000) mikBereit = true;   // ohne Antwort von HA nicht ewig
+            if (!mikBereit)   // Rückkanal zur Tür noch im Aufbau: gelb, damit man weiß, dass draußen noch keiner hört
+                knopfSetzen(knopfMikro, stumm ? R.drawable.ic_mic_aus : R.drawable.ic_mic, "Startet …", GELB);
+            else knopfSetzen(knopfMikro, stumm ? R.drawable.ic_mic_aus : R.drawable.ic_mic, stumm ? "Stumm" : "Mikrofon",
                     stumm ? ROT : KACHEL);   // stumm: rot, damit das weiße Symbol sichtbar bleibt
             knopfSetzen(knopfLaut, laut ? R.drawable.ic_laut : R.drawable.ic_ohr, laut ? "Lautsprecher" : "Hörer", BLAU);
         }
@@ -639,6 +646,7 @@ public class Gespraech extends Activity {
         stumm = !stumm;
         js("stumm(" + stumm + ")");
         zustandZeigen();
+        if (!stumm && !mikBereit) hinweis("Verbindung zur Tür baut sich noch auf – gleich hört man dich");
         // Gesprächsrunde: immer nur einer spricht - HA macht mich zum Sprecher, die anderen schalten sich stumm
         if (!stumm) sprechenSeit = System.currentTimeMillis();
         if ("gemischt".equals(modus)) { if (stumm) mikHochStoppen(); else mikHochStarten(); }
@@ -690,6 +698,12 @@ public class Gespraech extends Activity {
         if (!wunschGesetzt && r.optBoolean("ich_leite") && !"ha".equals(wunsch)) {
             wunschGesetzt = true;
             if (!wunsch.equals(r.optString("modus", "einer"))) modusSetzen(wunsch);
+        }
+        boolean bereit = r.optBoolean("mik_bereit", true);
+        if (bereit != mikBereit) {
+            mikBereit = bereit;
+            if (bereit && !stumm) hinweis("Jetzt hört man dich an der Tür");
+            zustandZeigen();
         }
         String neuModus = r.optString("modus", "einer");
         if (!neuModus.equals(modus)) {   // Leitung hat umgestellt: WebRTC neu aufbauen (Mikro direkt oder über den Mischer)

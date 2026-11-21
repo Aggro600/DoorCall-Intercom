@@ -142,6 +142,7 @@ class Tuerklingel:
         self.anrufe: dict[str, dict] = {}     # id -> {kid, start, geraete, angenommen, von}
         self._probe_zeit: dict[str, float] = {}   # Gerät -> letzter Probeanruf aus der App
         self._mischer: dict[str, Mischer] = {}
+        self._rk: dict[str, tuple[float, bool]] = {}   # Rückkanal-Zustand je go2rtc-Stream (Zwischenspeicher)
         wh = daten.get("webhook")
         if not wh:
             wh = daten["webhook"] = f"doorcall_{secrets.token_hex(16)}"
@@ -307,6 +308,27 @@ class Tuerklingel:
             x["teil"][neu]["seit"] = time.time()   # Leiter-Frist (Tür öffnen) neu
             _LOGGER.info("Türklingel: Leitung geht an %s", neu)
 
+    async def rueckkanal(self, k: dict | None) -> bool:
+        """Steht der Ton-Rückkanal zur Tür? go2rtc zeigt ihn als Quelle mit "audio, sendonly" (z. B. PCMU).
+        Ohne go2rtc-Antwort: True (lieber nichts anzeigen als fälschlich "nicht bereit"). Zwischenspeicher 1 s."""
+        a = (k or {}).get("anruf") or {}
+        if not a.get("go2rtc") or not a.get("src"):
+            return True
+        schl = a["go2rtc"] + "|" + a["src"]
+        t, wert = self._rk.get(schl, (0.0, True))
+        if time.time() - t < 1:
+            return wert
+        try:
+            s = async_get_clientsession(self.hass)
+            async with s.get(f"{a['go2rtc']}/api/streams", params={"src": a["src"]}, timeout=ClientTimeout(total=3)) as r:
+                d = await r.json(content_type=None)
+            wert = any("sendonly" in str(m) and str(m).startswith("audio")
+                       for p in (d.get("producers") or []) for m in (p.get("medias") or []))
+        except Exception:  # noqa: BLE001
+            wert = True
+        self._rk[schl] = (time.time(), wert)
+        return wert
+
     def runde(self, x: dict, g: str) -> dict:
         """Gesprächsrunde für die App dieses Geräts (Status-Antwort)."""
         teil = sorted(x["teil"], key=lambda y: x["teil"][y]["seit"])
@@ -316,6 +338,7 @@ class Tuerklingel:
              "ende": bool(x["ende"]) or (bool(x["angenommen"]) and g not in x["teil"]),
              "grund": (x.get("grund") or {}).get(g, ""),
              "modus": x.get("modus", "einer"), "gesperrt": g in x.get("gesperrt", []),
+             "mik_bereit": x.get("rk", True),
              "sprecher_liste": [self.name(y) for y in x.get("sprecher_set", []) if y in x["teil"]]}
         for t in r["teilnehmer"]:
             t["gesperrt"] = t["g"] in x.get("gesperrt", [])
@@ -514,6 +537,8 @@ class Tuerklingel:
                         for g in gaeste:
                             x.setdefault("grund", {})[g] = grund
                         await self._alle_raus(x, aid, [g for g in x["geraete"] if g != geraet], grund)
+            if x["angenommen"]:
+                x["rk"] = await self.rueckkanal(k)
             return web.json_response({"ok": ok, "text": text, **self.status(k), "runde": self.runde(x, geraet)})
         elif aktion == "antwort":
             if not secrets.compare_digest(x.get("schluessel", {}).get(geraet, "-"), str(j.get("schluessel") or "")):
