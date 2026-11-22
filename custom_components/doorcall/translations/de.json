@@ -25,7 +25,7 @@
         },
         "art": {
           "name": "Art",
-          "description": "normal (wie am Gerät eingestellt), laut (Lautstärke erzwingen) oder durchstellen (Ziele nehmen automatisch an – nur freigegebene Geräte)."
+          "description": "normal (wie am Gerät eingestellt), laut (Lautstärke erzwingen), lautlos (nur anzeigen, kein Ton) oder durchstellen (Ziele nehmen automatisch an – nur freigegebene Geräte)."
         },
         "runde": {
           "name": "Wer geht ran",

@@ -43,9 +43,11 @@ Card **"Devices for DoorCall"**:
 - **Off**: nothing new is set up.
 
 **Per-device settings** (same card):
-- **Ring volume**: "as doorbell", "as on the device" (normal, silent stays silent) or a fixed value that is enforced –
-  e.g. tablets 70 %, phones "as on the device".
-- **Open ring window right away**: when it rings, the window with live video opens at once (good for kiosk tablets).
+- **Ring volume**: "as doorbell", "as on the device" (normal, silent stays silent), **"silent"** (only shown, no sound,
+  no vibration) or a fixed value that is enforced – e.g. tablets silent, phones "as on the device".
+- **Display**: **Popup** (notification with "Video ansehen") or **full screen** (live-video window right away).
+- Each doorbell can override **ringing** and **display** per device (e.g. kitchen tablet loud for the flat door, silent
+  for the front door); empty = as set for the device.
 - **May be put through**: for Hausruf "put through directly" the device answers automatically.
 
 Ticking a device is enough: DoorCall sends it a **silent greeting** (no ringing) with its addresses. If the app is
@@ -145,6 +147,7 @@ rings; mic starts muted) without anyone ringing. Bring in other devices during t
 **How should it ring?** After choosing the target (app, card, action with `art:`):
 - **Normal** – as set on the device,
 - **Loud** – force the volume,
+- **Silent** (`lautlos`) – only shown, no sound or vibration,
 - **Put through directly** – targets answer automatically (only devices with "may be put through", their mic starts
   muted; others ring loudly).
 
@@ -157,8 +160,9 @@ rings; mic starts muted) without anyone ringing. Bring in other devices during t
 up you see a yellow **"You are alone in the call"** with "Call again"; after 30 s the app hangs up by itself.
 
 ## 9. Volume, silent mode, Do Not Disturb
-- **Minimum ring volume** (per doorbell, default 70 %): if a phone is silent, on vibrate or quieter, the app still
-  rings – through the alarm channel – and restores the volume afterwards.
+- **Ringing per doorbell** (for devices set to "as doorbell", default at least 70 %): if a phone is silent, on vibrate
+  or quieter, the app still rings – through the alarm channel – and restores the volume afterwards. "As on the device"
+  or "silent" are available too.
 - The phone's **Do Not Disturb** is respected: while it is on, the app does not ring through. Tip: switch DND at work by
   **location** (Tasker/Routines) and use **"Priority"** – "Total silence" also mutes **alarm clocks**.
 - **"Do not disturb" inside the app** (for 1 hour / until a time): rings only arrive as a silent notification.
@@ -186,5 +190,5 @@ Event **`doorcall_event`** with `aktion`, `geraet`, `anruf`, `klingel`, `name`:
 | Hausruf window does not open by itself | App → "allow showing the window right away (over other apps)" |
 | Dashboard button `doorcall://` does nothing / "no app available" | App ≥ 5.6 required; allow opening other apps in your kiosk browser; work phone with work profile: links cannot cross profiles → use the card `custom:doorcall-hausruf-card` instead |
 | Chrome cannot reach Home Assistant (Android 17) | Allow Chrome the **"Local network"** permission |
-| Popup cannot be tapped on a tablet | Use the **"Video ansehen"** button in the popup (some tablets do not open call popups when tapping the text) – or per device "open ring window right away" |
+| Popup cannot be tapped on a tablet | Use the **"Video ansehen"** button in the popup (some tablets do not open call popups when tapping the text) – or set the device's display to "full screen" |
 | Away from home nobody hears you (Hausruf/mixed) | App ≥ 5.9: via the external address (reverse proxy such as Nginx Proxy Manager) the app sends the mic in short packets |

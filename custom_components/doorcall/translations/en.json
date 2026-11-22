@@ -25,7 +25,7 @@
         },
         "art": {
           "name": "Mode",
-          "description": "normal (as set on the device), laut (force volume) or durchstellen (targets answer automatically – only approved devices)."
+          "description": "normal (as set on the device), laut (force volume), lautlos (silent – only shown) or durchstellen (targets answer automatically – only approved devices)."
         },
         "runde": {
           "name": "Who answers",

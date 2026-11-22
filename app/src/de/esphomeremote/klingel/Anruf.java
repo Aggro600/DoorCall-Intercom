@@ -47,6 +47,8 @@ import java.util.Locale;
 public final class Anruf {
     static final String TAG = "Tuerklingel";
     static final int AUS = 0, KLINGELT = 1, AKTIV = 2;
+    static final String K_KLINGELN_STILL = "klingeln_still_v1";   // "lautlos" aus DoorCall (2026-11-22): nur anzeigen
+    static boolean lautlos() { return cfg.optInt("laut", 0) < 0; }
     static final String K_KLINGELN = "klingeln_v1", K_LAUFEND = "laufend_v2", K_VERPASST = "verpasst_v1", K_STILL = "still_v1";
     static final int N_ANRUF = 1, N_VERPASST = 2, N_ANGEBOT = 3, N_BEENDET = 4;
     static String endeGrund = "";          // HA hat das Gespräch absichtlich beendet (Mitschauen gesperrt / für alle beendet)
@@ -284,7 +286,8 @@ public final class Anruf {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent nein = PendingIntent.getBroadcast(c, 3, new Intent(c, Knopf.class).setAction("ablehnen"),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification n = new Notification.Builder(c, K_KLINGELN)
+        boolean still = lautlos();
+        Notification n = new Notification.Builder(c, still ? K_KLINGELN_STILL : K_KLINGELN)
                 .setSmallIcon(R.drawable.ic_klingel)
                 .setContentTitle(name())
                 .setContentText(cfg.optString("hinweis", "Es klingelt"))
@@ -299,7 +302,7 @@ public final class Anruf {
                 .setStyle(Notification.CallStyle.forIncomingCall(p, nein, ja))
                 .setOnlyAlertOnce(leise || nurBild)
                 .build();
-        if (!leise) n.flags |= Notification.FLAG_INSISTENT;          // Klingelton wiederholen bis angenommen/abgelehnt
+        if (!leise && !still) n.flags |= Notification.FLAG_INSISTENT;          // Klingelton wiederholen bis angenommen/abgelehnt
         nm(c).notify(N_ANRUF, n);
     }
 
@@ -700,6 +703,14 @@ public final class Anruf {
             k.setVibrationPattern(new long[]{0, 1000, 1000});
             k.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             k.setBypassDnd(true);
+            m.createNotificationChannel(k);
+        }
+        if (m.getNotificationChannel(K_KLINGELN_STILL) == null) {
+            NotificationChannel k = new NotificationChannel(K_KLINGELN_STILL, "Klingeln (lautlos)", NotificationManager.IMPORTANCE_HIGH);
+            k.setDescription("Es klingelt an der Tür – nur anzeigen, ohne Ton (in DoorCall für dieses Gerät „lautlos“)");
+            k.setSound(null, null);
+            k.enableVibration(false);
+            k.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             m.createNotificationChannel(k);
         }
         if (m.getNotificationChannel(K_LAUFEND) == null) {   // v2: auch auf dem Sperrbildschirm sichtbar, ohne Ton

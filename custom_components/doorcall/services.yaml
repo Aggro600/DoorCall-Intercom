@@ -15,7 +15,7 @@ hausruf:
       default: normal
       selector:
         select:
-          options: ["normal", "laut", "durchstellen"]
+          options: ["normal", "laut", "lautlos", "durchstellen"]
     runde:
       required: false
       default: alle

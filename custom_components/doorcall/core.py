@@ -121,6 +121,20 @@ def validate_anruf(a) -> dict:
     if an and (not re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", an) or an.split(".")[0] not in ("select", "input_select")):
         raise vol.Invalid(f"Anruf: '{an}' ist keine Auswahl (select)")
     gruppen = [str(g).strip()[:24] for g in (a.get("gruppen") or []) if str(g).strip()][:6]
+    pro_geraet = {}   # 2026-11-22: je Klingel und Gerät abweichend: laut ("klingel", -1 lautlos, 0 wie am Gerät, 10-100), fenster
+    for g, e in ((a.get("pro_geraet") or {}) if isinstance(a.get("pro_geraet"), dict) else {}).items():
+        if not re.fullmatch(r"mobile_app_[a-z0-9_]+", str(g)) or not isinstance(e, dict):
+            continue
+        o = {}
+        lv = e.get("laut")
+        if lv == "klingel":
+            o["laut"] = "klingel"
+        elif isinstance(lv, (int, float)) and not isinstance(lv, bool) and -1 <= int(lv) <= 100:
+            o["laut"] = int(lv)
+        if isinstance(e.get("fenster"), bool):
+            o["fenster"] = e["fenster"]
+        if o:
+            pro_geraet[str(g)] = o
     kameras = []   # 2026-11-22: weitere go2rtc-Streams, im Gespräch umschaltbar (Ton bleibt bei der Tür)
     for x in (a.get("kameras") or [])[:8]:
         ks, kn = str((x or {}).get("src") or "").strip(), str((x or {}).get("name") or "").strip()[:20]
@@ -129,11 +143,11 @@ def validate_anruf(a) -> dict:
         if not re.fullmatch(r"[A-Za-z0-9_.\-]{1,64}", ks):
             raise vol.Invalid(f"Anruf: Kamera-Stream '{ks}' ungültig")
         kameras.append({"name": kn or ks, "src": ks})
-    return {"kameras": kameras, "gruppen": gruppen, "mitschauen": a.get("mitschauen", True) is not False,
+    return {"kameras": kameras, "pro_geraet": pro_geraet, "gruppen": gruppen, "mitschauen": a.get("mitschauen", True) is not False,
             "sprechen": "gemischt" if a.get("sprechen") == "gemischt" else "einer",
             # Mindestlautstärke beim Klingeln in % (2026-11-21): auch wenn das Handy lautlos ist (App klingelt dann über den
             # Wecker-Kanal); 0 = aus
-            "laut": max(0, min(100, int(a.get("laut", 70) if a.get("laut") is not None else 70))),
+            "laut": max(-1, min(100, int(a.get("laut", 70) if a.get("laut") is not None else 70))),   # -1 = lautlos
             "gaeste_bedienen": a.get("gaeste_bedienen", True) is not False,
             "antwort": an, "antwort_oeffnen_s": max(0, min(60, int(a.get("antwort_oeffnen_s") or 8))),
             # 2026-11-22: vorausgewählte Schnellantwort, Reihenfolge/Sichtbarkeit der Bereiche im Blatt, Gäste dürfen mitleiten
@@ -297,12 +311,16 @@ class Tuerklingel:
              "ha": f"http://{self.basis()}", "bild": bool(k.get("kamera")),
              "aktionen": [y["name"] for y in a.get("aktionen") or []], **self.status(k),
              "antworten": self._antworten(a), "antwort_oeffnen_s": a.get("antwort_oeffnen_s", 8),
-             "modus": x.get("modus", "einer"), "api": API, "laut": self.laut_fuer(g, a.get("laut", 70)),
-             "fenster": bool(self.geraet_einst(g).get("fenster")), "antwort_standard": a.get("antwort_standard", ""),
+             "modus": x.get("modus", "einer"), "api": API, "laut": self.laut_fuer(g, a.get("laut", 70), klingel=a),
+             "fenster": self.fenster_fuer(g, a), "antwort_standard": a.get("antwort_standard", ""),
              "menue": a.get("menue") or _menue(None), "kameras": self.kameras(k), "tueren": self.tueren(k, g), **extra}
         if x.get("art") == "haus":   # Hausruf: keine Kamera, keine Tür - nur Gegensprechen zwischen den Geräten
             erste = ((self.daten.get("klingeln") or [{}])[0].get("anruf") or {})
-            laut = 0 if x.get("laut_modus") == "normal" else self.laut_fuer(g, erste.get("laut", 70), x.get("laut_modus") == "laut")
+            laut = {"normal": 0, "lautlos": -1}.get(x.get("laut_modus"))
+            if laut is None:
+                laut = self.laut_fuer(g, erste.get("laut", 70), True)
+            if g == x.get("starter"):
+                laut = 0
             d.update({"laut": laut, "name": "Hausruf", "gezwungen": bool(extra.get("gezwungen")), "art": "haus", "go2rtc": "", "src": "", "oeffnen": False, "bild": False,
                       "aktionen": [], "schalter": [], "anzeigen": [], "antworten": [], "dauer": 45,
                       "von_name": self.name(x.get("starter", ""))})
@@ -426,11 +444,21 @@ class Tuerklingel:
         (Klingelfenster mit Video sofort öffnen), auto (darf beim Hausruf automatisch angenommen werden)."""
         return (self.daten.get("geraete_einst") or {}).get(g) or {}
 
-    def laut_fuer(self, g: str, klingel_laut: int, erzwingen: bool = False) -> int:
-        v = self.geraet_einst(g).get("laut")
-        if v is None:
+    def laut_fuer(self, g: str, klingel_laut: int, erzwingen: bool = False, klingel: dict | None = None) -> int:
+        """Lautstärke für die App: -1 lautlos (nur Anzeige), 0 wie am Gerät, 10-100 Mindestlautstärke.
+        Reihenfolge: Einstellung der Klingel für dieses Gerät, sonst die des Geräts, sonst die der Klingel."""
+        pk = ((klingel or {}).get("pro_geraet") or {}).get(g) or {}
+        v = pk["laut"] if "laut" in pk else self.geraet_einst(g).get("laut")
+        if v is None or v == "klingel":
             return int(klingel_laut or 0)
-        return int(v) if (v or not erzwingen) else int(klingel_laut or 70)
+        if erzwingen and int(v) <= 0:   # Hausruf "laut": auch lautlose/normale Geräte laut
+            return int(klingel_laut) if klingel_laut and int(klingel_laut) > 0 else 70
+        return int(v)
+
+    def fenster_fuer(self, g: str, klingel: dict | None = None) -> bool:
+        """Vollbild (Klingelfenster sofort) oder Popup: Einstellung der Klingel für dieses Gerät, sonst die des Geräts."""
+        pk = ((klingel or {}).get("pro_geraet") or {}).get(g) or {}
+        return bool(pk["fenster"]) if "fenster" in pk else bool(self.geraet_einst(g).get("fenster"))
 
     def erlaubt(self, g: str) -> bool:
         f = self.freigabe()
@@ -463,13 +491,13 @@ class Tuerklingel:
     async def hausruf(self, von: str, ziele: list[str] | None = None, art: str = "normal",
                       runde: str = "alle") -> tuple[str | None, str]:
         """von ruft ziele (Geräte, "gruppe:<Name>", "alle"). von nimmt sofort an (leitet), die anderen klingeln.
-        art: "normal" (wie am Gerät eingestellt), "laut" (Lautstärke erzwingen), "durchstellen" (Ziele nehmen
+        art: "normal" (wie am Gerät eingestellt), "laut" (Lautstärke erzwingen), "lautlos" (nur anzeigen), "durchstellen" (Ziele nehmen
         automatisch an - nur Geräte mit Freigabe "auto", Mikro dort erst stumm; andere klingeln laut).
         runde: "alle" (alle klingeln weiter, jeder kann dazukommen) oder "einer" (wer zuerst annimmt, spricht -
         bei den anderen hört es auf, sie bekommen leise "Gespräch läuft – dazukommen"; 2026-11-22)."""
         if ziele and str(ziele[0]).startswith("klingel:"):   # "Tür anrufen" aus derselben Auswahl
             return await self.tuer_anrufen(str(ziele[0])[8:], von)
-        art = art if art in ("normal", "laut", "durchstellen") else "normal"
+        art = art if art in ("normal", "laut", "lautlos", "durchstellen") else "normal"
         runde = "einer" if runde == "einer" and art != "durchstellen" else "alle"
         if not re.fullmatch(r"mobile_app_[a-z0-9_]+", von or ""):
             return None, "Gerät unbekannt"
@@ -484,7 +512,7 @@ class Tuerklingel:
         self.anrufe[aid] = {"kid": "", "art": "haus", "starter": von, "start": jetzt, "geraete": [von, *an],
                             "angenommen": 0.0, "von": "", "schluessel": {}, "teil": {}, "frei": True, "sprecher": "",
                             "eingeladen": list(an), "ende": 0.0, "modus": "haus", "gesperrt": [], "sprecher_set": [],
-                            "laut_modus": "normal" if art == "normal" else "laut", "runde": runde}
+                            "laut_modus": art if art in ("normal", "lautlos") else "laut", "runde": runde}
         await self._senden(von, "KLINGELN", self._payload(aid, von, sofort=True, hinweis="Hausruf läuft …"))
         for g in an:
             zwingen = art == "durchstellen" and bool(self.geraet_einst(g).get("auto"))

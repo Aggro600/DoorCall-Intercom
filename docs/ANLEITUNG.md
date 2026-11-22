@@ -44,9 +44,12 @@ Karte **„Geräte für DoorCall“**:
 - **Aus**: es wird nichts neu eingerichtet.
 
 **Einstellungen je Gerät** (gleiche Karte):
-- **Lautstärke beim Klingeln**: „wie Klingel“, „wie am Gerät“ (normal, lautlos bleibt lautlos) oder ein fester Wert,
-  der erzwungen wird – z. B. Tablets 70 %, Handys „wie am Gerät“.
-- **Klingelfenster sofort**: beim Klingeln geht gleich das Fenster mit Live-Bild auf (gut für Tablets im Kiosk-Modus).
+- **Lautstärke beim Klingeln**: „wie Klingel“, „wie am Gerät“ (normal, lautlos bleibt lautlos), **„lautlos“** (Anruf
+  wird nur angezeigt, kein Ton, keine Vibration) oder ein fester Wert, der erzwungen wird – z. B. Tablets lautlos,
+  Handys „wie am Gerät“.
+- **Anzeige**: **Popup** (Meldung oben mit „Video ansehen“) oder **Vollbild** (gleich das Fenster mit Live-Bild).
+- Bei jeder Klingel lassen sich **Klingeln** und **Anzeige** je Gerät noch abweichend einstellen (z. B. Küchen-Tablet bei
+  der Wohnungstür laut, bei der Haustür lautlos); leer = wie beim Gerät.
 - **Darf durchgestellt werden**: beim Hausruf „Direkt durchstellen“ nimmt das Gerät automatisch an.
 
 Ein Gerät **anhaken** genügt: DoorCall schickt ihm einen **stillen Gruß** (es klingelt nicht) mit den Adressen. Ist die
@@ -147,6 +150,7 @@ Karte mit `an: klingel:<id>`, Aktion `doorcall.hausruf` mit `an: klingel:<id>`.
 **Wie soll es klingeln?** Nach der Wahl des Ziels (App, Karte, Aktion mit `art:`):
 - **Normal** – wie am Gerät eingestellt,
 - **Laut** – Lautstärke erzwingen,
+- **Lautlos** – nur anzeigen, kein Ton, keine Vibration,
 - **Direkt durchstellen** – die Ziele nehmen automatisch an (nur Geräte mit „Darf durchgestellt werden“, deren
   Mikrofon ist zuerst stumm; andere klingeln laut).
 
@@ -159,8 +163,9 @@ Karte mit `an: klingel:<id>`, Aktion `doorcall.hausruf` mit `an: klingel:<id>`.
 erscheint gelb **„Du bist allein im Gespräch“** mit „Nochmal rufen“; nach 30 s legt die App von selbst auf.
 
 ## 9. Lautstärke, lautlos, „Nicht stören“
-- **Mindestlautstärke** (je Klingel, Standard 70 %): Ist ein Handy lautlos, auf Vibration oder leiser, klingelt die App
-  trotzdem – über den Wecker-Kanal – und stellt die Lautstärke danach zurück.
+- **Klingeln je Klingel** (für Geräte „wie Klingel“, Standard mindestens 70 %): Ist ein Handy lautlos, auf Vibration
+  oder leiser, klingelt die App trotzdem – über den Wecker-Kanal – und stellt die Lautstärke danach zurück. Auch
+  „wie am Gerät“ oder „lautlos“ wählbar.
 - **„Nicht stören“ des Handys** wird respektiert: Ist es an, klingelt die App nicht laut durch. Tipp: auf der Arbeit
   „Nicht stören“ per Tasker/Routine nach **Ort** schalten und den Modus **„Priorität“** nehmen – „Keine
   Unterbrechungen“ schaltet auch **Wecker** stumm.
@@ -188,5 +193,5 @@ Ereignis **`doorcall_event`** mit `aktion`, `geraet`, `anruf`, `klingel`, `name`
 | Hausruf-Fenster geht nicht von selbst auf | App → „Fenster sofort zeigen erlauben (über anderen Apps)“ |
 | Dashboard-Knopf `doorcall://` tut nichts / „keine App verfügbar“ | App ≥ 5.6 nötig; im Kiosk-Browser das Öffnen anderer Apps erlauben; Diensthandy mit Arbeitsprofil: Links können nicht zwischen Profilen wechseln → stattdessen die Karte `custom:doorcall-hausruf-card` nehmen |
 | Chrome erreicht Home Assistant nicht (Android 17) | Chrome die Berechtigung **„Lokales Netzwerk“** erlauben |
-| Popup lässt sich auf dem Tablet nicht antippen | Knopf **„Video ansehen“** im Popup nutzen (manche Tablets öffnen Anruf-Popups nicht per Tipp auf den Text) – oder je Gerät „Klingelfenster sofort öffnen“ |
+| Popup lässt sich auf dem Tablet nicht antippen | Knopf **„Video ansehen“** im Popup nutzen (manche Tablets öffnen Anruf-Popups nicht per Tipp auf den Text) – oder je Gerät Anzeige „Vollbild“ |
 | Unterwegs hört man mich zu Hause nicht (Hausruf/gemischt) | App ≥ 5.9: über die externe Adresse (Reverse-Proxy wie Nginx Proxy Manager) schickt die App das Mikro in kurzen Paketen |

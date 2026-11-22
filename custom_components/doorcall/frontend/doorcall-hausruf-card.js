@@ -58,6 +58,7 @@ class DoorCallHausrufCard extends HTMLElement {
     this._fenster("Hausruf an " + z.name, `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Wie soll es klingeln?</p>`, [
       { text: "🔔  Normal – wie am Gerät eingestellt", los: () => this._runde(z, "normal") },
       { text: "🔊  Laut – Lautstärke erzwingen", los: () => this._runde(z, "laut") },
+      { text: "🔕  Lautlos – nur anzeigen, kein Ton", los: () => this._runde(z, "lautlos") },
       ...(auto ? [{ text: "⚡  Direkt durchstellen – nimmt automatisch an", los: () => this._rufen(z.id, "durchstellen") }] : []),
     ]);
   }

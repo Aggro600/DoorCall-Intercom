@@ -32,6 +32,28 @@ class DoorCallPanel extends HTMLElement {
   }
 
   _name(e) { return this._hass.states[e]?.attributes.friendly_name || e; }
+  // Je Klingel und Gerät: Klingeln (laut/normal/lautlos) und Anzeige (Popup/Vollbild), sonst gilt die Einstellung des Geräts
+  _proGeraet(k, ki, grs) {
+    const a = k.anruf || {}, pg = a.pro_geraet || {};
+    const alle = [...new Set([...(a.geraete || []), ...grs.filter((g) => (a.gruppen || []).includes(g.name)).flatMap((g) => g.geraete || [])])];
+    if (!alle.length) return "";
+    const lautName = (v) => v == null ? "wie Klingel" : v === 0 ? "wie am Gerät" : v === -1 ? "lautlos" : v + " %";
+    return `<div class="note" style="margin-top:6px">Klingeln und Anzeige bei dieser Klingel (leer = wie beim Gerät eingestellt):</div>` + alle.map((g) => {
+      const e = pg[g] || {}, ge = (this.info.geraete_einst || {})[g] || {};
+      const lv = e.laut === undefined ? "" : String(e.laut);
+      return `<div class="zeile"><span style="min-width:150px">${esc(this._gname(g))}</span>
+        <label>Klingeln <select data-pg="laut" data-ki="${ki}" data-g="${esc(g)}">
+          <option value="" ${lv === "" ? "selected" : ""}>wie Gerät (${esc(lautName(ge.laut))})</option>
+          <option value="0" ${lv === "0" ? "selected" : ""}>wie am Gerät (normal)</option>
+          <option value="-1" ${lv === "-1" ? "selected" : ""}>lautlos</option>
+          <option value="klingel" ${lv === "klingel" ? "selected" : ""}>Mindestlautstärke der Klingel</option>
+          ${[30, 40, 50, 60, 70, 80, 90, 100].map((v) => `<option value="${v}" ${lv === String(v) ? "selected" : ""}>${v} %</option>`).join("")}</select></label>
+        <label>Anzeige <select data-pg="fenster" data-ki="${ki}" data-g="${esc(g)}">
+          <option value="" ${e.fenster === undefined ? "selected" : ""}>wie Gerät (${ge.fenster ? "Vollbild" : "Popup"})</option>
+          <option value="0" ${e.fenster === false ? "selected" : ""}>Popup</option>
+          <option value="1" ${e.fenster === true ? "selected" : ""}>Vollbild</option></select></label></div>`; }).join("");
+  }
+
   _gname(g) { return (this.info.namen || {})[g] || g.replace(/^mobile_app_/, "").split("_").map((w) => w[0]?.toUpperCase() + w.slice(1)).join(" "); }
   _ents(doms, wert) {
     const e = Object.keys(this._hass.states).filter((x) => !doms || doms.includes(x.split(".")[0])).sort((a, b) => this._name(a).localeCompare(this._name(b), "de"));
@@ -88,13 +110,14 @@ class DoorCallPanel extends HTMLElement {
         <div class="zeile">${geraete.map((g) => `<label><input type="checkbox" data-fg="geraet" data-g="${esc(g)}" ${fg.modus === "alle" || (fg.geraete || []).includes(g) ? "checked" : ""} ${fg.modus === "alle" ? "disabled" : ""}>${esc(this._gname(g))}${(this.info.verbunden || []).includes(g) ? " ✓" : ""}</label>`).join("")}</div>
         <div class="zeile"><button class="ghost" data-a="suchen" ${fg.modus === "aus" ? "disabled" : ""}><ha-icon icon="mdi:magnify"></ha-icon>Jetzt Geräte suchen</button></div>
         <hr><div class="note">Einstellungen je Gerät</div>
-        <div class="note erkl"><b>Lautstärke beim Klingeln:</b> „wie Klingel“ nimmt die Mindestlautstärke der Klingel, „wie am Gerät“ klingelt normal (lautlos bleibt lautlos), ein Wert erzwingt diese Lautstärke (z. B. für Tablets).
-          <b>Klingelfenster sofort:</b> beim Klingeln geht gleich das Fenster mit Live-Bild auf statt nur die Meldung (für Tablets; braucht „Über anderen Apps anzeigen“).
+        <div class="note erkl"><b>Lautstärke beim Klingeln:</b> „wie Klingel“ nimmt die Mindestlautstärke der Klingel, „wie am Gerät“ klingelt normal (lautlos bleibt lautlos), „lautlos“ zeigt den Anruf nur an (kein Ton, keine Vibration), ein Wert erzwingt diese Lautstärke.
+          <b>Anzeige:</b> „Popup“ zeigt den Anruf als Meldung oben, „Vollbild“ öffnet gleich das Fenster mit Live-Bild (braucht „Über anderen Apps anzeigen“).
+          Bei jeder Klingel lässt sich das je Gerät noch abweichend einstellen.
           <b>Darf durchgestellt werden:</b> beim Hausruf „Direkt durchstellen“ nimmt dieses Gerät automatisch an (Mikro dort zuerst stumm).</div>
         ${(fg.modus === "alle" ? geraete : (fg.geraete || [])).map((g) => { const e = (this.info.geraete_einst || {})[g] || {}; return `<div class="zeile"><span style="min-width:150px">${esc(this._gname(g))}</span>
-          <label>Lautstärke <select data-ge="laut" data-g="${esc(g)}"><option value="" ${e.laut == null ? "selected" : ""}>wie Klingel</option><option value="0" ${e.laut === 0 ? "selected" : ""}>wie am Gerät</option>
+          <label>Lautstärke <select data-ge="laut" data-g="${esc(g)}"><option value="" ${e.laut == null ? "selected" : ""}>wie Klingel</option><option value="0" ${e.laut === 0 ? "selected" : ""}>wie am Gerät</option><option value="-1" ${e.laut === -1 ? "selected" : ""}>lautlos</option>
             ${[30, 40, 50, 60, 70, 80, 90, 100].map((v) => `<option value="${v}" ${e.laut === v ? "selected" : ""}>${v} %</option>`).join("")}</select></label>
-          <label><input type="checkbox" data-ge="fenster" data-g="${esc(g)}" ${e.fenster ? "checked" : ""}>Klingelfenster sofort</label>
+          <label>Anzeige <select data-ge="fenster" data-g="${esc(g)}"><option value="" ${e.fenster ? "" : "selected"}>Popup</option><option value="1" ${e.fenster ? "selected" : ""}>Vollbild</option></select></label>
           <label><input type="checkbox" data-ge="auto" data-g="${esc(g)}" ${e.auto ? "checked" : ""}>Darf durchgestellt werden</label></div>`; }).join("")}
         <hr><div class="note">Ruhe-Zonen</div>
         <div class="note erkl">Ist ein Gerät in einer seiner Ruhe-Zonen (z. B. auf der Arbeit), klingelt DoorCall dort nicht – weder Haustür noch Hausruf, Dazuholen oder Mitschauen. Entscheidet Home Assistant über den Standort der Home-Assistant-App (device_tracker), unabhängig vom „Nicht stören“ des Handys. Ein Probeanruf an genau dieses Gerät klingelt trotzdem. Tipp: Zonen unter ~150 m Radius erkennt das Handy oft nicht zuverlässig.</div>
@@ -133,6 +156,7 @@ class DoorCallPanel extends HTMLElement {
       <hr><div class="note">Geräte, die klingeln (Home-Assistant-App + App „Türklingel“):</div>
       <div class="zeile">${geraete.length ? geraete.map((g) => `<label><input type="checkbox" data-a2="geraet" data-ki="${ki}" data-g="${esc(g)}" ${(a.geraete || []).includes(g) ? "checked" : ""}>${esc(this._gname(g))}${(this.info.app || []).includes(g) ? " ✓" : ""}</label>`).join("")
         : `<span class="note">Kein Gerät mit Home-Assistant-App gefunden.</span>`}</div>
+      ${this._proGeraet(k, ki, grs)}
       ${grs.filter((g) => g.name).length ? `<div class="zeile"><span class="note">Gruppen:</span>${grs.filter((g) => g.name).map((g) => `<label><input type="checkbox" data-a2="gruppe" data-ki="${ki}" data-g="${esc(g.name)}" ${(a.gruppen || []).includes(g.name) ? "checked" : ""}>${esc(g.name)} <span class="note">(${(g.geraete || []).map((d) => esc(this._gname(d))).join(", ") || "leer"})</span></label>`).join("")}</div>` : ""}
       <div class="zeile">
         <label title="Adresse von go2rtc (z. B. aus Frigate)">go2rtc <input data-a2="go2rtc" data-ki="${ki}" value="${esc(a.go2rtc || "")}" placeholder="${esc(this.info.go2rtc || "http://…:1984")}" style="width:210px"></label>
@@ -144,8 +168,10 @@ class DoorCallPanel extends HTMLElement {
           <input data-kam="src" data-ki="${ki}" data-ai="${ai}" value="${esc(x.src || "")}" placeholder="Stream (z. B. garten)" style="width:130px">
           <button class="rot" data-a="kam_del" data-ki="${ki}" data-ai="${ai}" title="Entfernen"><ha-icon icon="mdi:close"></ha-icon></button></span>`).join("")}
         ${(a.kameras || []).length < 8 ? `<button class="ghost" data-a="kam_add" data-ki="${ki}"><ha-icon icon="mdi:plus"></ha-icon>Kamera</button>` : ""}</div>
-      <div class="zeile"><label title="0 = aus">Mindestlautstärke beim Klingeln <input type="number" data-a2="laut" data-ki="${ki}" min="0" max="100" step="10" value="${a.laut ?? 70}" style="width:64px"> %</label></div>
-      <div class="note erkl">Ist ein Handy lautlos, auf Vibration oder leiser als dieser Wert, klingelt die App trotzdem – über den Wecker-Kanal (wie ein Wecker, auch bei „lautlos“) mit dieser Lautstärke. Nach dem Klingeln wird die Lautstärke zurückgestellt. 0 = aus (dann gilt die Lautstärke des Handys). „Nicht stören“ in der App Türklingel bleibt still.</div>
+      <div class="zeile"><label>Klingeln (für Geräte „wie Klingel“) <select data-a2="laut" data-ki="${ki}">
+        <option value="-1" ${a.laut === -1 ? "selected" : ""}>lautlos</option><option value="0" ${a.laut === 0 ? "selected" : ""}>wie am Gerät</option>
+        ${[30, 40, 50, 60, 70, 80, 90, 100].map((v) => `<option value="${v}" ${(a.laut ?? 70) === v ? "selected" : ""}>mindestens ${v} %</option>`).join("")}</select></label></div>
+      <div class="note erkl">Ist ein Handy lautlos, auf Vibration oder leiser als dieser Wert, klingelt die App trotzdem – über den Wecker-Kanal (wie ein Wecker, auch bei „lautlos“) mit dieser Lautstärke. Nach dem Klingeln wird die Lautstärke zurückgestellt. „wie am Gerät“: es gilt die Lautstärke des Handys. „lautlos“: der Anruf wird nur angezeigt, ohne Ton und Vibration. Gilt für alle Geräte, die bei „Einstellungen je Gerät“ auf „wie Klingel“ stehen. „Nicht stören“ in der App Türklingel bleibt still.</div>
       <hr><div class="note">Gesprächsrunde</div>
       <div class="zeile">
         <label title="Wer zuerst annimmt, leitet. Die anderen Geräte können als Gast mitschauen; die Leitung kann das sperren und Geräte dazuholen."><input type="checkbox" data-a2="mitschauen" data-ki="${ki}" ${a.mitschauen !== false ? "checked" : ""}>Mitschauen auf den anderen Geräten erlauben</label>
@@ -220,7 +246,8 @@ class DoorCallPanel extends HTMLElement {
     }
     if (t.dataset.ge) {   // Einstellungen je Gerät (doorcall/geraet_einst)
       const e = this.info.geraete_einst ||= {}, g = t.dataset.g, x = (e[g] ||= {});
-      if (t.dataset.ge === "laut") x.laut = t.value === "" ? null : Number(t.value); else x[t.dataset.ge] = t.checked;
+      if (t.dataset.ge === "laut") x.laut = t.value === "" ? null : Number(t.value);
+      else if (t.dataset.ge === "fenster") x.fenster = t.value === "1"; else x[t.dataset.ge] = t.checked;
       try { this.info.geraete_einst = (await this._hass.callWS({ type: "doorcall/geraet_einst", einst: e })).geraete_einst; this.msg = ""; this.msgErr = false; }
       catch (err) { this.msg = "Gerät: " + (err.message || err); this.msgErr = true; }
       return this._zeigen();
@@ -254,6 +281,13 @@ class DoorCallPanel extends HTMLElement {
     }
     if (!k) return;
     const a = (k.anruf ||= LEER());
+    if (t.dataset.pg) {   // je Klingel und Gerät
+      const pg = (a.pro_geraet ||= {}), e = (pg[t.dataset.g] ||= {}), v = t.value;
+      if (t.dataset.pg === "laut") { if (v === "") delete e.laut; else e.laut = v === "klingel" ? "klingel" : Number(v); }
+      else { if (v === "") delete e.fenster; else e.fenster = v === "1"; }
+      if (!Object.keys(e).length) delete pg[t.dataset.g];
+      return this._speichern();
+    }
     if (t.dataset.kam) {
       const x = (a.kameras ||= [])[Number(t.dataset.ai)]; if (!x) return;
       x[t.dataset.kam] = t.value.trim().slice(0, t.dataset.kam === "name" ? 20 : 64);
@@ -277,7 +311,7 @@ class DoorCallPanel extends HTMLElement {
       a.oeffnen_frei = t.checked;
     } else if (f === "mitschauen" || f === "gaeste_bedienen" || f === "gaeste_leiten") a[f] = t.checked;
     else if (f === "dauer") a.dauer = Math.max(10, Math.min(120, Number(t.value) || 30));
-    else if (f === "laut") a.laut = Math.max(0, Math.min(100, Number(t.value) || 0));
+    else if (f === "laut") a.laut = Math.max(-1, Math.min(100, Number(t.value) || 0));
     else if (f === "antwort_oeffnen_s") a.antwort_oeffnen_s = Math.max(0, Math.min(60, Number(t.value) || 0));
     else { a[f] = t.value.trim(); if (f === "oeffnen" && !a.oeffnen) a.oeffnen_frei = false; }
     if (f === "src" && a.src && !a.go2rtc && this.info.go2rtc) a.go2rtc = this.info.go2rtc;

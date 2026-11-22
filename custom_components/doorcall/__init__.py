@@ -32,7 +32,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.21"
+VERSION_JS = "2026.11.22.24"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -157,7 +157,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_register(DOMAIN, "hausruf", _hausruf, schema=vol.Schema({
             vol.Required("von"): vol.Match(r"^mobile_app_[a-z0-9_]+$"),
             vol.Optional("an"): vol.All(cv.ensure_list, [cv.string]),
-            vol.Optional("art", default="normal"): vol.In(["normal", "laut", "durchstellen"]),
+            vol.Optional("art", default="normal"): vol.In(["normal", "laut", "lautlos", "durchstellen"]),
             vol.Optional("runde", default="alle"): vol.In(["alle", "einer"])}))
     return True
 
@@ -336,7 +336,7 @@ async def ws_ziele(hass, connection, msg) -> None:
 
 
 @websocket_api.websocket_command({vol.Required("type"): "doorcall/geraet_einst", vol.Required("einst"): {
-    vol.Match(r"^mobile_app_[a-z0-9_]+$"): {vol.Optional("laut"): vol.Any(None, vol.All(int, vol.Range(min=0, max=100))),
+    vol.Match(r"^mobile_app_[a-z0-9_]+$"): {vol.Optional("laut"): vol.Any(None, vol.All(int, vol.Range(min=-1, max=100))),
                                           vol.Optional("fenster"): bool, vol.Optional("auto"): bool}}})
 @websocket_api.require_admin
 @websocket_api.async_response
