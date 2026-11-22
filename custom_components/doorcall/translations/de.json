@@ -21,7 +21,7 @@
         },
         "an": {
           "name": "An",
-          "description": "Geräte, \"gruppe:<Name>\" oder \"alle\" (alle Geräte mit der App). Standard: alle."
+          "description": "Geräte, \"gruppe:NAME\" oder \"alle\" (alle Geräte mit der App). Standard: alle."
         },
         "art": {
           "name": "Art",

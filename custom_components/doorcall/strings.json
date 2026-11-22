@@ -21,7 +21,7 @@
         },
         "an": {
           "name": "To",
-          "description": "Devices, \"gruppe:<name>\" or \"alle\" (all devices with the app). Default: all."
+          "description": "Devices, \"gruppe:NAME\" or \"alle\" (all devices with the app). Default: all."
         },
         "art": {
           "name": "Mode",
