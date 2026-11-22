@@ -58,7 +58,9 @@ One card per doorbell (**"Add doorbell"** for more):
 - **Devices** and **groups** that ring.
 - **go2rtc** address and **stream**, **ring duration**.
 - **Cameras in the call**: at the top of the call "📷 Bild: … ▾" and "🔊 Ton: … ▾" switch picture and sound (hear and
-  talk) separately; tick "… auch umschalten" to switch both. In mixed mode the mic always goes to the door. Other doorbells on the same go2rtc are included automatically, add further streams (e.g. garden) here.
+  talk) separately; tick "… auch umschalten" to switch both. In mixed mode the mic always goes to the door.
+  When the picture shows another door, the app shows that door's **open button, switches, buttons, displays and quick
+  replies** (only if the device is assigned to that door). Other doorbells on the same go2rtc are included automatically, add further streams (e.g. garden) here.
   A door without audio backchannel works too: video, sound from outside, switches – only nobody outside hears you.
 - **Minimum ring volume** (see section 9).
 - **Call round**: allow watching along, guests may operate, speaking mode (sections 6 and 7).

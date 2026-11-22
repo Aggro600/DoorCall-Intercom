@@ -60,7 +60,8 @@ Karte je Klingel (**„Klingel hinzufügen“** für weitere):
 - **go2rtc**-Adresse und **Stream**, **Klingeldauer**.
 - **Kameras im Gespräch**: Oben im Gespräch „📷 Bild: … ▾“ und „🔊 Ton: … ▾“ – Bild und Ton
   (hören und sprechen) getrennt umschalten, mit dem Häkchen „… auch umschalten“ beides zugleich. Im Modus „gemischt“
-  geht das Mikro immer an die Tür. Andere Klingeln mit demselben go2rtc sind automatisch dabei, weitere Streams (z. B.
+  geht das Mikro immer an die Tür. Zeigt das Bild eine andere Tür, zeigt die App deren **Tür öffnen, Schalter, Knöpfe,
+  Anzeigen und Ansagen** (nur wenn das Gerät bei dieser Tür eingetragen ist). Andere Klingeln mit demselben go2rtc sind automatisch dabei, weitere Streams (z. B.
   Garten) trägst du hier ein. Eine Tür ohne Ton-Rückkanal geht auch: Bild, Ton von draußen, Schalter – man hört dich nur
   draußen nicht.
 - **Mindestlautstärke** (siehe Abschnitt 9).

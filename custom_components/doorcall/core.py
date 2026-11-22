@@ -224,16 +224,33 @@ class Tuerklingel:
         a = (k or {}).get("anruf") or {}
         if not a.get("go2rtc") or not a.get("src"):
             return []
-        out = [{"name": k.get("name", "Tür"), "src": a["src"]}, *(a.get("kameras") or [])]
+        out = [{"name": k.get("name", "Tür"), "src": a["src"], "kid": k.get("id", "")}, *(a.get("kameras") or [])]
         for kk in self.daten.get("klingeln") or []:
             a2 = kk.get("anruf") or {}
             if kk is not k and a2.get("src") and a2.get("go2rtc") == a["go2rtc"]:
-                out.append({"name": kk.get("name", a2["src"]), "src": a2["src"]})
+                out.append({"name": kk.get("name", a2["src"]), "src": a2["src"], "kid": kk.get("id", "")})
+        tuer_von = {(kk.get("anruf") or {}).get("src"): kk.get("id", "") for kk in self.daten.get("klingeln") or []
+                    if (kk.get("anruf") or {}).get("go2rtc") == a["go2rtc"]}
         gesehen, rein = set(), []
         for c in out:
             if c["src"] not in gesehen:
-                gesehen.add(c["src"]); rein.append({"name": c["name"], "src": c["src"]})
+                gesehen.add(c["src"])
+                rein.append({"name": c["name"], "src": c["src"], "kid": c.get("kid") or tuer_von.get(c["src"], "")})
         return rein
+
+    def tueren(self, k: dict | None, g: str) -> dict:
+        """Bedienung der ANDEREN Türen für das Gespräch (2026-11-22): schaut man im Gespräch eine andere Tür an,
+        zeigt die App deren Tür-öffnen, Schalter, Knöpfe und Ansagen - nur Türen, bei denen das Gerät eingetragen ist."""
+        out = {}
+        for kk in self.daten.get("klingeln") or []:
+            if kk is k or not kk.get("id") or not self.eingetragen(kk, g):
+                continue
+            a2 = kk.get("anruf") or {}
+            out[kk["id"]] = {"name": kk.get("name", "Tür"), "oeffnen": bool(a2.get("oeffnen_frei") and a2.get("oeffnen")),
+                             "aktionen": [y["name"] for y in a2.get("aktionen") or []], "antworten": self._antworten(a2),
+                             "antwort_oeffnen_s": a2.get("antwort_oeffnen_s", 8), "antwort_standard": a2.get("antwort_standard", ""),
+                             "menue": a2.get("menue") or _menue(None), **self.status(kk)}
+        return out
 
     def klingel(self, kid: str) -> dict | None:
         return next((k for k in self.daten.get("klingeln") or [] if k.get("id") == kid), None)
@@ -282,7 +299,7 @@ class Tuerklingel:
              "antworten": self._antworten(a), "antwort_oeffnen_s": a.get("antwort_oeffnen_s", 8),
              "modus": x.get("modus", "einer"), "api": API, "laut": self.laut_fuer(g, a.get("laut", 70)),
              "fenster": bool(self.geraet_einst(g).get("fenster")), "antwort_standard": a.get("antwort_standard", ""),
-             "menue": a.get("menue") or _menue(None), "kameras": self.kameras(k), **extra}
+             "menue": a.get("menue") or _menue(None), "kameras": self.kameras(k), "tueren": self.tueren(k, g), **extra}
         if x.get("art") == "haus":   # Hausruf: keine Kamera, keine Tür - nur Gegensprechen zwischen den Geräten
             erste = ((self.daten.get("klingeln") or [{}])[0].get("anruf") or {})
             laut = 0 if x.get("laut_modus") == "normal" else self.laut_fuer(g, erste.get("laut", 70), x.get("laut_modus") == "laut")
@@ -731,6 +748,11 @@ class Tuerklingel:
         if schluessel_ok:
             self._app_merken(geraet)
         jetzt = time.time()
+        kt = k   # Tür, die gerade angeschaut wird (App schickt "tuer"): deren Schalter/Öffnen/Ansagen - nur wenn eingetragen
+        if (tid := str(j.get("tuer") or "")) and x and tid != x.get("kid"):
+            k2 = self.klingel(tid)
+            if k2 and self.eingetragen(k2, geraet):
+                kt = k2
         if aktion == "angenommen":
             if x["ende"]:
                 return antwort(False, "Gespräch ist schon vorbei")
@@ -799,7 +821,7 @@ class Tuerklingel:
             self._aufraeumen(x)
             ok, text = True, ""
             if aktion == "schalten":
-                ok, text = await self._schalten(x, k, geraet, j.get("nr"))
+                ok, text = await self._schalten(x, kt, geraet, j.get("nr"))
             elif aktion == "sprechen":
                 if geraet not in x["teil"]:
                     ok, text = False, "nicht im Gespräch"
@@ -872,18 +894,18 @@ class Tuerklingel:
                         await self._alle_raus(x, aid, [g for g in x["geraete"] if g != geraet], grund)
             if x["angenommen"]:
                 x["rk"] = await self.rueckkanal(k)
-            return web.json_response({"ok": ok, "text": text, **self.status(k), "runde": self.runde(x, geraet)})
+            return web.json_response({"ok": ok, "text": text, **self.status(kt), "runde": self.runde(x, geraet)})
         elif aktion == "antwort":
             if not secrets.compare_digest(x.get("schluessel", {}).get(geraet, "-"), str(j.get("schluessel") or "")):
                 return antwort(False, "nicht erlaubt")
-            return antwort(*await self._antwort(x, k, geraet, j.get("nr"), bool(j.get("oeffnen"))))
+            return antwort(*await self._antwort(x, kt, geraet, j.get("nr"), bool(j.get("oeffnen"))))
         elif aktion in ("oeffnen", "aktion"):
             if not secrets.compare_digest(x.get("schluessel", {}).get(geraet, "-"), str(j.get("schluessel") or "")):
                 _LOGGER.warning("Türklingel: %s von %s ohne gültigen Schlüssel abgelehnt", aktion, geraet)
                 return antwort(False, "nicht erlaubt")
             if aktion == "oeffnen":
-                return antwort(*await self._oeffnen(x, k, geraet))
-            return antwort(*await self._aktion(x, k, geraet, j.get("nr")))
+                return antwort(*await self._oeffnen(x, kt, geraet))
+            return antwort(*await self._aktion(x, kt, geraet, j.get("nr")))
         return antwort(True, "")
 
     def _antworten(self, a: dict) -> list[str]:

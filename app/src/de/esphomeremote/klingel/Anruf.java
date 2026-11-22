@@ -571,6 +571,7 @@ public final class Anruf {
                     .put("name", name()).put("schluessel", cfg.optString("schluessel", "")).put("app", appVersion());
             if (nr >= 0) j.put("nr", nr);
             if (oeffnen) j.put("oeffnen", true);
+            if (!cfg.optString("_tuer").isEmpty()) j.put("tuer", cfg.optString("_tuer"));   // angeschaute andere Tür
             if (zusatz != null) for (java.util.Iterator<String> it = zusatz.keys(); it.hasNext(); ) { String k = it.next(); j.put(k, zusatz.get(k)); }
         } catch (Exception ignored) {}
         new Thread(() -> {
@@ -605,6 +606,7 @@ public final class Anruf {
             j.put("tuerklingel", aktion).put("id", id()).put("geraet", cfg.optString("geraet", Build.MODEL))
                     .put("schluessel", cfg.optString("schluessel", "")).put("app", appVersion());
             if (nr >= 0) j.put("nr", nr);
+            if (!cfg.optString("_tuer").isEmpty()) j.put("tuer", cfg.optString("_tuer"));
             if (zusatz != null) for (java.util.Iterator<String> it = zusatz.keys(); it.hasNext(); ) { String k = it.next(); j.put(k, zusatz.get(k)); }
         } catch (Exception ignored) {}
         new Thread(() -> {

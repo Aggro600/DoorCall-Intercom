@@ -71,7 +71,16 @@ public class Gespraech extends Activity {
     private final Runnable statusHolen = this::statusHolen;
     private long hinweisBis;
     private boolean bedienungAus;
-    private final Runnable entschaerfen = () -> { this.oeffnenScharf = false; tuerSetzen("🔓  Tür sofort öffnen", BLAU); };
+    private final Runnable entschaerfen = () -> { this.oeffnenScharf = false; tuerSetzen(tuerText(), BLAU); };
+
+    /** Name der angeschauten anderen Tür ("" = die angerufene Tür). */
+    private String tuerName() {
+        String kid = Anruf.cfg.optString("_tuer");
+        JSONObject t = Anruf.cfg.optJSONObject("tueren");
+        return kid.isEmpty() || t == null || t.optJSONObject(kid) == null ? "" : t.optJSONObject(kid).optString("name");
+    }
+
+    private String tuerText() { return tuerName().isEmpty() ? "🔓  Tür sofort öffnen" : "🔓  " + tuerName() + " öffnen"; }
     private TextView tuerOben;   // "Tür sofort öffnen" oben über dem Kamerabild (Nutzer 2026-11-21), zweimal tippen
     private boolean mitMikro, stumm = true, laut = true, oeffnenScharf;   // Mikrofon startet stumm (Nutzer 2026-11-20)
     private View knopfMikro, knopfLaut, knopfTuer;
@@ -1057,7 +1066,7 @@ public class Gespraech extends Activity {
     private void tuerKnopf() {
         if (!oeffnenScharf) {
             oeffnenScharf = true;
-            tuerSetzen("Wirklich öffnen? Nochmal tippen", 0xFFF59E0B);
+            tuerSetzen(tuerName().isEmpty() ? "Wirklich öffnen? Nochmal tippen" : tuerName() + " wirklich öffnen? Nochmal tippen", 0xFFF59E0B);
             h.postDelayed(entschaerfen, 4000);
             return;
         }
@@ -1067,7 +1076,7 @@ public class Gespraech extends Activity {
         Anruf.melden("oeffnen", -1, t -> {
             boolean ok = !t.startsWith("!");
             tuerSetzen(ok ? "Geöffnet ✓" : "Nicht geöffnet", ok ? 0xFF16A34A : 0xFFB91C1C);
-            hinweis(ok ? "Tür geöffnet" : t.substring(1));
+            hinweis(ok ? (tuerName().isEmpty() ? "Tür" : tuerName()) + " geöffnet" : t.substring(1));
             h.postDelayed(entschaerfen, 4000);
         });
     }
@@ -1450,9 +1459,44 @@ public class Gespraech extends Activity {
         dlg.show();
     }
 
+    private static final String[] TUER_FELDER = {"oeffnen", "aktionen", "antworten", "antwort_oeffnen_s", "antwort_standard", "menue", "schalter", "anzeigen"};
+    private JSONObject eigeneTuer;   // Bedienung der angerufenen Tür (zum Zurückschalten)
+
+    /** Bild zeigt eine andere Tür: deren Tür-öffnen, Schalter, Knöpfe und Ansagen zeigen (2026-11-22). */
+    private void tuerFolgen() {
+        String kid = "";
+        JSONArray k = kameras();
+        JSONObject tueren = Anruf.cfg.optJSONObject("tueren");
+        String bild = kamSrc.isEmpty() ? Anruf.cfg.optString("src") : kamSrc;
+        for (int i = 0; i < k.length(); i++)
+            if (k.optJSONObject(i).optString("src").equals(bild)) kid = k.optJSONObject(i).optString("kid");
+        if (kid.equals(Anruf.cfg.optString("klingel")) || tueren == null || !tueren.has(kid)) kid = "";
+        if (kid.equals(Anruf.cfg.optString("_tuer"))) return;
+        try {
+            if (eigeneTuer == null) {
+                eigeneTuer = new JSONObject();
+                for (String f : TUER_FELDER) eigeneTuer.put(f, Anruf.cfg.opt(f) == null ? JSONObject.NULL : Anruf.cfg.opt(f));
+            }
+            JSONObject q = kid.isEmpty() ? eigeneTuer : tueren.optJSONObject(kid);
+            for (String f : TUER_FELDER) { Object v = q.opt(f); if (v == null || v == JSONObject.NULL) Anruf.cfg.remove(f); else Anruf.cfg.put(f, v); }
+            Anruf.cfg.put("_tuer", kid);
+        } catch (Exception e) { Log.w(Anruf.TAG, "Tür wechseln: " + e); return; }
+        String n = tuerName();
+        oeffnenScharf = false;
+        h.removeCallbacks(entschaerfen);
+        tuerSetzen(tuerText(), BLAU);
+        boolean oe = Anruf.cfg.optBoolean("oeffnen", false) && Anruf.zustand != Anruf.AUS;
+        tuerOben.setVisibility(oe && blattHoehe() == 0 ? View.VISIBLE : View.GONE);
+        tuerKlappe.setVisibility(oe ? View.VISIBLE : View.GONE);
+        extrasBauen();
+        statusZeigen(Anruf.cfg);
+        hinweis(kid.isEmpty() ? "Bedienung: " + Anruf.name() : "Bedienung jetzt: " + n);
+    }
+
     private void kamSetzen(String ton, String bild) {
         boolean tonNeu = !ton.equals(tonSrc);
         tonSrc = ton; kamSrc = bild;
+        tuerFolgen();
         String an = String.valueOf(!kamSrc.equals(tonSrc));
         if (tonNeu) {   // Hauptverbindung neu zur Ton-Quelle (Mikro im Modus "schnell" spricht dorthin)
             js("kamAn=" + an + ";" + startJs(Anruf.zustand == Anruf.AKTIV));
