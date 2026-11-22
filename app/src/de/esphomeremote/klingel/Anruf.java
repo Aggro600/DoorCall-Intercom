@@ -194,7 +194,8 @@ public final class Anruf {
         angebotWeg(c, "");
         verlauf(c, "klingelt");
         // Übungs-/Testanrufe ohne Home Assistant nicht als "Zuletzt" merken (sonst fehlen Schalter und Ansagen beim Probeanruf)
-        if (!id().startsWith("probe") && !(cfg.optString("webhook").isEmpty() && cfg.optString("webhook_extern").isEmpty())) speichern(c);
+        // Hausruf nicht als "Zuletzt" merken (keine Klingel - sonst findet der Probeanruf-Knopf keine Klingel mehr)
+        if (!id().startsWith("probe") && !haus() && !(cfg.optString("webhook").isEmpty() && cfg.optString("webhook_extern").isEmpty())) speichern(c);
         zustand = KLINGELT;
         beginn = System.currentTimeMillis();
         H.removeCallbacks(ZEIT_UM);

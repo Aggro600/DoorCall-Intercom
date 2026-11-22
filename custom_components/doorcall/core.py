@@ -755,9 +755,15 @@ class Tuerklingel:
 
     async def _probeanruf(self, kid: str, geraet: str) -> tuple[bool, str]:
         """Nur an ein Gerät, das bei dieser Klingel eingetragen ist; höchstens alle 20 s (Schlüssel bekommt es per Weckruf)."""
+        def eingetragen(kk):
+            a2 = (kk or {}).get("anruf") or {}
+            return geraet in self.ziele([*(a2.get("geraete") or []), *(f"gruppe:{g}" for g in a2.get("gruppen") or [])])
         k = self.klingel(kid)
+        if not k or not eingetragen(k):   # z. B. letzter Anruf war ein Hausruf (keine Klingel): erste passende Klingel
+            k = next((kk for kk in self.daten.get("klingeln") or [] if eingetragen(kk)), None)
+            kid = (k or {}).get("id", kid)
         an = (k or {}).get("anruf") or {}
-        if not k or geraet not in self.ziele([*(an.get("geraete") or []), *(f"gruppe:{g}" for g in an.get("gruppen") or [])]):
+        if not k or not eingetragen(k):
             return False, "Gerät nicht eingetragen"
         jetzt = time.time()
         if jetzt - self._probe_zeit.get(geraet, 0) < 20:
