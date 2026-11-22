@@ -56,15 +56,23 @@ class DoorCallHausrufCard extends HTMLElement {
   _art(z, geraete) {
     const auto = z.id === "alle" || z.id.startsWith("gruppe:") ? geraete.some((g) => g.auto && g.id !== ich()) : geraete.some((g) => g.id === z.id && g.auto);
     this._fenster("Hausruf an " + z.name, `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Wie soll es klingeln?</p>`, [
-      { text: "🔔  Normal – wie am Gerät eingestellt", los: () => this._rufen(z.id, "normal") },
-      { text: "🔊  Laut – Lautstärke erzwingen", los: () => this._rufen(z.id, "laut") },
+      { text: "🔔  Normal – wie am Gerät eingestellt", los: () => this._runde(z, "normal") },
+      { text: "🔊  Laut – Lautstärke erzwingen", los: () => this._runde(z, "laut") },
       ...(auto ? [{ text: "⚡  Direkt durchstellen – nimmt automatisch an", los: () => this._rufen(z.id, "durchstellen") }] : []),
     ]);
   }
 
-  async _rufen(an, art = this._c.art || "normal") {
+  _runde(z, art) {   // mehrere Ziele: wer darf rangehen? (2026-11-22)
+    if (this._c.runde || !(z.id === "alle" || z.id.startsWith("gruppe:"))) return this._rufen(z.id, art);
+    this._fenster("Hausruf an " + z.name, `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Wer soll rangehen?</p>`, [
+      { text: "☝️  Einer – wer zuerst annimmt, bei den anderen hört es auf", los: () => this._rufen(z.id, art, "einer") },
+      { text: "👥  Alle – alle klingeln weiter, jeder kann dazukommen", los: () => this._rufen(z.id, art, "alle") },
+    ]);
+  }
+
+  async _rufen(an, art = this._c.art || "normal", runde = this._c.runde || "alle") {
     try {
-      await this._hass.callService("doorcall", "hausruf", { von: ich(), an: [an], art });
+      await this._hass.callService("doorcall", "hausruf", { von: ich(), an: [an], art, runde });
       this._fenster("Hausruf", "<p>Ruft an … Das Gesprächsfenster öffnet sich in der App „Türklingel“.</p>", []);
       setTimeout(() => this._zu(), 2500);
     } catch (e) {

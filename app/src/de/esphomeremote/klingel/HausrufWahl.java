@@ -28,8 +28,8 @@ public class HausrufWahl extends Activity {
         if (an != null && !an.trim().isEmpty()) {
             JSONArray z = new JSONArray();
             for (String s : an.split(",")) if (!s.trim().isEmpty()) z.put(s.trim());
-            String art = u.getQueryParameter("art");
-            starten(z, art == null ? "normal" : art);
+            String art = u.getQueryParameter("art"), runde = u.getQueryParameter("runde");
+            starten(z, art == null ? "normal" : art, runde == null ? "alle" : runde);
             return;
         }
         Anruf.anHa(this, "hausruf_ziele", null, r -> {
@@ -43,28 +43,44 @@ public class HausrufWahl extends Activity {
             for (int i = 0; i < namen.length; i++) namen[i] = z.optJSONObject(i).optString("name");
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("Hausruf an …")
-                    .setItems(namen, (d, w) -> artWaehlen(this, z.optJSONObject(w).optString("name"), art -> starten(new JSONArray().put(z.optJSONObject(w).optString("id")), art), this::finish))
+                    .setItems(namen, (d, w) -> artWaehlen(this, z.optJSONObject(w).optString("name"), z.optJSONObject(w).optString("id"),
+                            (art, runde) -> starten(new JSONArray().put(z.optJSONObject(w).optString("id")), art, runde), this::finish))
                     .setNegativeButton("Abbrechen", (d, w) -> finish())
                     .setOnCancelListener(d -> finish())
                     .show();
         });
     }
 
-    /** Wie soll es klingeln? normal / laut / durchstellen (2026-11-22). */
-    static void artWaehlen(android.app.Activity a, String ziel, java.util.function.Consumer<String> fertig, Runnable abbruch) {
+    /** Wie soll es klingeln? normal / laut / durchstellen - bei Gruppe/Alle danach: wer geht ran? einer / alle (2026-11-22). */
+    static void artWaehlen(android.app.Activity a, String ziel, String zielId, java.util.function.BiConsumer<String, String> fertig, Runnable abbruch) {
         String[] namen = {"🔔  Normal – wie am Gerät eingestellt", "🔊  Laut – Lautstärke erzwingen", "⚡  Direkt durchstellen – nimmt automatisch an"};
         String[] werte = {"normal", "laut", "durchstellen"};
         new AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setTitle("Hausruf an " + ziel)
+                .setItems(namen, (d, w) -> {
+                    boolean mehrere = "alle".equals(zielId) || zielId.startsWith("gruppe:");
+                    if (!mehrere || "durchstellen".equals(werte[w])) { fertig.accept(werte[w], "alle"); return; }
+                    rundeWaehlen(a, ziel, r -> fertig.accept(werte[w], r), abbruch);
+                })
+                .setNegativeButton("Abbrechen", (d, w) -> { if (abbruch != null) abbruch.run(); })
+                .setOnCancelListener(d -> { if (abbruch != null) abbruch.run(); })
+                .show();
+    }
+
+    static void rundeWaehlen(android.app.Activity a, String ziel, java.util.function.Consumer<String> fertig, Runnable abbruch) {
+        String[] namen = {"☝️  Einer – wer zuerst annimmt, bei den anderen hört es auf", "👥  Alle – alle klingeln weiter, jeder kann dazukommen"};
+        String[] werte = {"einer", "alle"};
+        new AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Wer soll rangehen?")
                 .setItems(namen, (d, w) -> fertig.accept(werte[w]))
                 .setNegativeButton("Abbrechen", (d, w) -> { if (abbruch != null) abbruch.run(); })
                 .setOnCancelListener(d -> { if (abbruch != null) abbruch.run(); })
                 .show();
     }
 
-    private void starten(JSONArray ziele, String art) {
+    private void starten(JSONArray ziele, String art, String runde) {
         JSONObject x = new JSONObject();
-        try { x.put("ziele", ziele).put("art", art); } catch (Exception ignored) {}
+        try { x.put("ziele", ziele).put("art", art).put("runde", runde); } catch (Exception ignored) {}
         Anruf.anHa(this, "hausruf_start", x, rr -> {
             Toast.makeText(this, rr == null ? "Home Assistant nicht erreichbar" : rr.optString("text"), Toast.LENGTH_LONG).show();
             finish();

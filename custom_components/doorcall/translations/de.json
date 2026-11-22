@@ -26,6 +26,10 @@
         "art": {
           "name": "Art",
           "description": "normal (wie am Gerät eingestellt), laut (Lautstärke erzwingen) oder durchstellen (Ziele nehmen automatisch an – nur freigegebene Geräte)."
+        },
+        "runde": {
+          "name": "Wer geht ran",
+          "description": "alle (alle klingeln weiter, jeder kann dazukommen) oder einer (wer zuerst annimmt, spricht – bei den anderen hört es auf, sie bekommen leise „dazukommen“)."
         }
       }
     }

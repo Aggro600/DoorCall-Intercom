@@ -406,12 +406,12 @@ public final class Anruf {
         nm(c).notify(N_ANGEBOT, new Notification.Builder(c, K_MITSCHAUEN)
                 .setSmallIcon(R.drawable.ic_klingel)
                 .setContentTitle(a.optString("name", "Tür") + ": Gespräch läuft")
-                .setContentText(a.optString("hinweis", "Jemand spricht mit der Tür") + " – antippen zum Mitschauen")
+                .setContentText(a.optString("hinweis", "Jemand spricht mit der Tür") + ("haus".equals(a.optString("art")) ? " – antippen zum Dazukommen" : " – antippen zum Mitschauen"))
                 .setCategory(Notification.CATEGORY_CALL)
                 .setOngoing(true)
                 .setTimeoutAfter(30 * 60_000L)
                 .setContentIntent(los)
-                .addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_annehmen), "Mitschauen", los).build())
+                .addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_annehmen), "haus".equals(a.optString("art")) ? "Dazukommen" : "Mitschauen", los).build())
                 .build());
     }
 

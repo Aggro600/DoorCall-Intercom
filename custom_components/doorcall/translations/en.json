@@ -26,6 +26,10 @@
         "art": {
           "name": "Mode",
           "description": "normal (as set on the device), laut (force volume) or durchstellen (targets answer automatically – only approved devices)."
+        },
+        "runde": {
+          "name": "Who answers",
+          "description": "alle (everyone keeps ringing, anyone can join) or einer (first to answer talks – the others stop ringing and get a quiet \"join\" notification)."
         }
       }
     }

@@ -139,6 +139,11 @@ dass jedes Gerät alle anderen hört.
 - **Direkt durchstellen** – die Ziele nehmen automatisch an (nur Geräte mit „Darf durchgestellt werden“, deren
   Mikrofon ist zuerst stumm; andere klingeln laut).
 
+**Wer soll rangehen?** Bei „Alle“ oder einer Gruppe (nicht bei „Direkt durchstellen“) kommt danach noch (Aktion: `runde:`):
+- **Einer** – wer zuerst annimmt, spricht mit dir; bei den anderen hört es auf, sie bekommen leise „Gespräch läuft –
+  antippen zum Dazukommen“.
+- **Alle** – alle klingeln weiter, jeder, der annimmt, ist mit drin (Standard der Aktion).
+
 **Im Gespräch** steht groß in der Mitte, wer dabei ist oder bei wem es noch klingelt. Haben alle anderen aufgelegt,
 erscheint gelb **„Du bist allein im Gespräch“** mit „Nochmal rufen“; nach 30 s legt die App von selbst auf.
 

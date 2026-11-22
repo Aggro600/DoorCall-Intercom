@@ -138,6 +138,11 @@ device hears all others.
 - **Put through directly** – targets answer automatically (only devices with "may be put through", their mic starts
   muted; others ring loudly).
 
+**Who should answer?** For "Everyone" or a group (not with "put through directly") a second question follows (action: `runde:`):
+- **One** (`einer`) – whoever answers first talks to you; the others stop ringing and get a quiet "call in progress –
+  tap to join".
+- **All** (`alle`) – everyone keeps ringing, everyone who answers is in (action default).
+
 **During the call** the middle of the screen shows who is in, or where it is still ringing. When everybody else has hung
 up you see a yellow **"You are alone in the call"** with "Call again"; after 30 s the app hangs up by itself.
 

@@ -59,9 +59,9 @@ public class Start extends Activity {
             for (int i = 0; i < namen.length; i++) namen[i] = z.optJSONObject(i).optString("name");
             new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("Hausruf an …")
-                    .setItems(namen, (d, w) -> HausrufWahl.artWaehlen(this, z.optJSONObject(w).optString("name"), art -> {
+                    .setItems(namen, (d, w) -> HausrufWahl.artWaehlen(this, z.optJSONObject(w).optString("name"), z.optJSONObject(w).optString("id"), (art, runde) -> {
                         JSONObject x = new JSONObject();
-                        try { x.put("ziele", new org.json.JSONArray().put(z.optJSONObject(w).optString("id"))).put("art", art); } catch (Exception ignored) {}
+                        try { x.put("ziele", new org.json.JSONArray().put(z.optJSONObject(w).optString("id"))).put("art", art).put("runde", runde); } catch (Exception ignored) {}
                         Anruf.anHa(this, "hausruf_start", x, rr -> android.widget.Toast.makeText(this,
                                 rr == null ? "Home Assistant nicht erreichbar" : rr.optString("text"), android.widget.Toast.LENGTH_LONG).show());
                     }, null))

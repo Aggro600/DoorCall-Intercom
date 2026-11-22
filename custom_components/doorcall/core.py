@@ -418,11 +418,15 @@ class Tuerklingel:
         return ziele
 
     # ------------------------------------------------------------ Hausruf (Gegensprechen ohne Klingel)
-    async def hausruf(self, von: str, ziele: list[str] | None = None, art: str = "normal") -> tuple[str | None, str]:
+    async def hausruf(self, von: str, ziele: list[str] | None = None, art: str = "normal",
+                      runde: str = "alle") -> tuple[str | None, str]:
         """von ruft ziele (Geräte, "gruppe:<Name>", "alle"). von nimmt sofort an (leitet), die anderen klingeln.
         art: "normal" (wie am Gerät eingestellt), "laut" (Lautstärke erzwingen), "durchstellen" (Ziele nehmen
-        automatisch an - nur Geräte mit Freigabe "auto", Mikro dort erst stumm; andere klingeln laut)."""
+        automatisch an - nur Geräte mit Freigabe "auto", Mikro dort erst stumm; andere klingeln laut).
+        runde: "alle" (alle klingeln weiter, jeder kann dazukommen) oder "einer" (wer zuerst annimmt, spricht -
+        bei den anderen hört es auf, sie bekommen leise "Gespräch läuft – dazukommen"; 2026-11-22)."""
         art = art if art in ("normal", "laut", "durchstellen") else "normal"
+        runde = "einer" if runde == "einer" and art != "durchstellen" else "alle"
         if not re.fullmatch(r"mobile_app_[a-z0-9_]+", von or ""):
             return None, "Gerät unbekannt"
         alle_an = [g for g in self.ziele(ziele or ["alle"]) if g != von]
@@ -436,13 +440,13 @@ class Tuerklingel:
         self.anrufe[aid] = {"kid": "", "art": "haus", "starter": von, "start": jetzt, "geraete": [von, *an],
                             "angenommen": 0.0, "von": "", "schluessel": {}, "teil": {}, "frei": True, "sprecher": "",
                             "eingeladen": list(an), "ende": 0.0, "modus": "haus", "gesperrt": [], "sprecher_set": [],
-                            "laut_modus": "normal" if art == "normal" else "laut"}
+                            "laut_modus": "normal" if art == "normal" else "laut", "runde": runde}
         await self._senden(von, "KLINGELN", self._payload(aid, von, sofort=True, hinweis="Hausruf läuft …"))
         for g in an:
             zwingen = art == "durchstellen" and bool(self.geraet_einst(g).get("auto"))
             await self._senden(g, "KLINGELN", self._payload(aid, g, hinweis=f"{self.name(von)} ruft",
                                                             **({"sofort": True, "gezwungen": True} if zwingen else {})))
-        _LOGGER.info("Hausruf %s: %s ruft %s", aid, von, ", ".join(an))
+        _LOGGER.info("Hausruf %s: %s ruft %s (%s)", aid, von, ", ".join(an), runde)
         self.hass.bus.async_fire(EREIGNIS, {"aktion": "hausruf", "geraet": von, "anruf": aid, "klingel": "",
                                             "name": "Hausruf", "an": an})
         return aid, "Ruft " + ", ".join(self.name(g) for g in an)
@@ -557,18 +561,18 @@ class Tuerklingel:
         jetzt, dauer = time.time(), (45 if x.get("art") == "haus" else 120) + 5
         seit = x.get("klingel_seit", {})
         return [self.name(g) for g in x["geraete"]
-                if g not in x["teil"] and g not in x.get("abgesagt", []) and g not in x.get("weg", [])
+                if g not in x["teil"] and g not in x.get("klingel_aus", []) and g not in x.get("abgesagt", []) and g not in x.get("weg", [])
                 and (x.get("art") == "haus" or g in x.get("eingeladen", []))
                 and jetzt - seit.get(g, x["start"]) < dauer]
 
-    async def _angebot(self, x: dict, aid: str, an: list[str]) -> None:
+    async def _angebot(self, x: dict, aid: str, an: list[str], hinweis: str = "") -> None:
         """Klingeln beenden und (wenn Mitschauen frei) "Gespräch läuft – mitschauen" anbieten."""
         for g in an:
             if g in x["teil"]:
                 continue
             if x["frei"] and not x["ende"] and not self.ruhig(g):
                 await self._senden(g, "BEENDEN", {"id": aid, "angebot": self._payload(
-                    aid, g, hinweis=f"{self.name(x['von'])} spricht mit der Tür")})
+                    aid, g, hinweis=hinweis or f"{self.name(x['von'])} spricht mit der Tür")})
             else:
                 await self._senden(g, "BEENDEN", {"id": aid})
 
@@ -592,6 +596,8 @@ class Tuerklingel:
                 x["abgesagt"].remove(g)
             if g in x.get("weg", []):
                 x["weg"].remove(g)
+            if g in x.get("klingel_aus", []):
+                x["klingel_aus"].remove(g)
             await self._senden(g, "KLINGELN", self._payload(aid, g, hinweis=f"{von} holt dich dazu", eingeladen=True))
         _LOGGER.info("Türklingel: %s holt %s dazu", x["von"], ", ".join(neu))
         return True, "Klingelt bei " + ", ".join(self.name(g) for g in neu)
@@ -649,7 +655,8 @@ class Tuerklingel:
                 return web.json_response({"ok": True, "ziele": [{"id": "alle", "name": "Alle"}] + [
                     {"id": f"gruppe:{gr['name']}", "name": f"Gruppe {gr['name']}"} for gr in self.gruppen()] + [
                     {"id": g, "name": self.name(g)} for g in self.app_geraete() if g != geraet]})
-            aid, text = await self.hausruf(geraet, [str(z) for z in (j.get("ziele") or ["alle"])][:16], str(j.get("art") or "normal"))
+            aid, text = await self.hausruf(geraet, [str(z) for z in (j.get("ziele") or ["alle"])][:16], str(j.get("art") or "normal"),
+                                         str(j.get("runde") or "alle"))
             return antwort(bool(aid), text)
         if aktion == "probeanruf":   # Probeanruf-Knopf der App (2026-11-21): echter Anruf nur an dieses Gerät
             return antwort(*await self._probeanruf(str(j.get("klingel") or aid.rsplit("_", 1)[0]), geraet))
@@ -684,6 +691,10 @@ class Tuerklingel:
                     x["teil"][geraet] = {"seit": jetzt, "zuletzt": jetzt}
                     if not x["von"]:
                         x["angenommen"], x["von"] = jetzt, geraet
+                    if x.get("runde") == "einer" and "klingel_aus" not in x and geraet != x.get("starter"):
+                        # erster Angerufener ist dran -> bei den anderen aufhören, leise "dazukommen" anbieten
+                        x["klingel_aus"] = [g for g in x["geraete"] if g not in x["teil"]]
+                        await self._angebot(x, aid, x["klingel_aus"], f"{self.name(x['starter'])} spricht mit {self.name(geraet)}")
                 return web.json_response({"ok": True, "text": "", "rolle": "leiter" if geraet == x["von"] else "gast"})
             if not x["angenommen"] or (not x["teil"] and not x["von"]):
                 x["angenommen"], x["von"] = jetzt, geraet

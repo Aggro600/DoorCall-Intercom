@@ -32,7 +32,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.16"
+VERSION_JS = "2026.11.22.17"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -150,13 +150,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _einrichten_planen(hass, entry, t)
     if not hass.services.has_service(DOMAIN, "hausruf"):
         async def _hausruf(call: ServiceCall) -> None:
-            aid, text = await _t(hass).hausruf(call.data["von"], call.data.get("an") or ["alle"], call.data.get("art", "normal"))
+            aid, text = await _t(hass).hausruf(call.data["von"], call.data.get("an") or ["alle"], call.data.get("art", "normal"),
+                                                call.data.get("runde", "alle"))
             if not aid:
                 raise HomeAssistantError(text)
         hass.services.async_register(DOMAIN, "hausruf", _hausruf, schema=vol.Schema({
             vol.Required("von"): vol.Match(r"^mobile_app_[a-z0-9_]+$"),
             vol.Optional("an"): vol.All(cv.ensure_list, [cv.string]),
-            vol.Optional("art", default="normal"): vol.In(["normal", "laut", "durchstellen"])}))
+            vol.Optional("art", default="normal"): vol.In(["normal", "laut", "durchstellen"]),
+            vol.Optional("runde", default="alle"): vol.In(["alle", "einer"])}))
     return True
 
 
