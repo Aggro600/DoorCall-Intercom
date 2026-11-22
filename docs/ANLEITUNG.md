@@ -58,8 +58,9 @@ Karte je Klingel (**„Klingel hinzufügen“** für weitere):
 - **Auslöser** und **Kamera** (für Anruferbild und Foto bei „verpasst“).
 - **Geräte** und **Gruppen**, die klingeln sollen.
 - **go2rtc**-Adresse und **Stream**, **Klingeldauer**.
-- **Kameras im Gespräch**: Oben im Gespräch „📷 … ▾ Kamera wechseln“ – zeigt das Bild einer anderen Kamera, Ton und
-  Mikrofon bleiben bei der Tür. Andere Klingeln mit demselben go2rtc sind automatisch dabei, weitere Streams (z. B.
+- **Kameras im Gespräch**: Oben im Gespräch „📷 Bild: … ▾“ und „🔊 Ton: … ▾“ – Bild und Ton
+  (hören und sprechen) getrennt umschalten, mit dem Häkchen „… auch umschalten“ beides zugleich. Im Modus „gemischt“
+  geht das Mikro immer an die Tür. Andere Klingeln mit demselben go2rtc sind automatisch dabei, weitere Streams (z. B.
   Garten) trägst du hier ein. Eine Tür ohne Ton-Rückkanal geht auch: Bild, Ton von draußen, Schalter – man hört dich nur
   draußen nicht.
 - **Mindestlautstärke** (siehe Abschnitt 9).

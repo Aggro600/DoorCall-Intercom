@@ -50,8 +50,11 @@ public class Gespraech extends Activity {
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private WebView web;
-    private TextView titel, status, kamKnopf;
-    private String kamSrc = "";   // "" = Kamera der Tür; sonst anderer go2rtc-Stream (nur Bild, Ton bleibt bei der Tür)
+    private TextView titel, status, kamKnopf, tonKnopf;
+    private LinearLayout kamZeile;
+    // Bild und Ton getrennt umschaltbar (2026-11-22): "" = Kamera der Tür, sonst anderer go2rtc-Stream.
+    // Die Hauptverbindung (Ton, Mikro, Bild) geht an die Ton-Quelle; ist das Bild woanders, liegt eine zweite Verbindung nur mit Bild darüber.
+    private String kamSrc = "", tonSrc = "";
     private LinearLayout leiste, extras, unten, oben, schalterZeile;
     private TextView anzeigeZeile, rundeZeile;
     private LinearLayout leitungZeile;
@@ -258,11 +261,17 @@ public class Gespraech extends Activity {
         rundeZeile.setPadding(0, dp(2), 0, 0);
         rundeZeile.setVisibility(View.GONE);
         oben.addView(rundeZeile);
-        kamKnopf = text(15, BLAU_HELL);   // Kamera wechseln (2026-11-22)
-        kamKnopf.setPadding(0, dp(8), 0, dp(2));
-        kamKnopf.setOnClickListener(v -> kamWahl());
-        kamKnopf.setVisibility(View.GONE);
-        oben.addView(kamKnopf);
+        kamZeile = new LinearLayout(this);   // Kamera wechseln: Bild und Ton getrennt (2026-11-22)
+        kamZeile.setVisibility(View.GONE);
+        kamKnopf = text(15, BLAU_HELL);
+        kamKnopf.setPadding(0, dp(8), dp(18), dp(2));
+        kamKnopf.setOnClickListener(v -> kamWahl(false));
+        tonKnopf = text(15, BLAU_HELL);
+        tonKnopf.setPadding(0, dp(8), 0, dp(2));
+        tonKnopf.setOnClickListener(v -> kamWahl(true));
+        kamZeile.addView(kamKnopf);
+        kamZeile.addView(tonKnopf);
+        oben.addView(kamZeile);
         View linie = new View(this);
         linie.setBackgroundColor(BLAU);
         LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(-1, dp(3));
@@ -1388,34 +1397,69 @@ public class Gespraech extends Activity {
         return k == null || Anruf.haus() ? new JSONArray() : k;
     }
 
-    private void kamZeigen() {
+    private String kamName(String src) {
         JSONArray k = kameras();
-        if (kamKnopf == null) return;
-        if (k.length() < 2) { kamKnopf.setVisibility(View.GONE); return; }
-        String n = k.optJSONObject(0).optString("name");
-        for (int i = 1; i < k.length(); i++) if (k.optJSONObject(i).optString("src").equals(kamSrc)) n = k.optJSONObject(i).optString("name");
-        kamKnopf.setText("📷  " + n + "   ▾ Kamera wechseln");
-        kamKnopf.setVisibility(View.VISIBLE);
+        for (int i = 1; i < k.length(); i++) if (k.optJSONObject(i).optString("src").equals(src)) return k.optJSONObject(i).optString("name");
+        return k.length() > 0 ? k.optJSONObject(0).optString("name") : "Tür";
     }
 
-    private void kamWahl() {
+    private void kamZeigen() {
+        if (kamZeile == null) return;
+        if (kameras().length() < 2) { kamZeile.setVisibility(View.GONE); return; }
+        kamKnopf.setText("📷 Bild: " + kamName(kamSrc) + " ▾");
+        tonKnopf.setText("🔊 Ton: " + kamName(tonSrc) + " ▾");
+        kamZeile.setVisibility(View.VISIBLE);
+    }
+
+    /** ton=false: nur das Bild umschalten; ton=true: hören und sprechen mit dieser Kamera. "Beides" schaltet gleichzeitig. */
+    private void kamWahl(boolean ton) {
         JSONArray k = kameras();
         if (k.length() < 2) return;
         if (sparBild != null && sparBild.getVisibility() == View.VISIBLE) { hinweis("Erst „Live starten“"); return; }
+        String jetzt = ton ? tonSrc : kamSrc;
         String[] n = new String[k.length()];
         for (int i = 0; i < n.length; i++) {
-            String s = k.optJSONObject(i).optString("src");
-            boolean jetzt = i == 0 ? kamSrc.isEmpty() : s.equals(kamSrc);
-            n[i] = (jetzt ? "●  " : "○  ") + k.optJSONObject(i).optString("name") + (i == 0 ? "  (Tür)" : "");
+            boolean an = i == 0 ? jetzt.isEmpty() : k.optJSONObject(i).optString("src").equals(jetzt);
+            n[i] = (an ? "●  " : "○  ") + k.optJSONObject(i).optString("name") + (i == 0 ? "  (Tür)" : "");
         }
-        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Kamera")
-                .setItems(n, (d, w) -> {
-                    kamSrc = w == 0 ? "" : k.optJSONObject(w).optString("src");
-                    js("kam(" + (w > 0) + ")");
-                    kamZeigen();
-                })
-                .show();
+        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(ton ? "Ton – hören und sprechen mit …" : "Bild von …")
+                .setNegativeButton("Abbrechen", null)
+                .create();
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        android.widget.CheckBox auch = new android.widget.CheckBox(this);
+        auch.setText(ton ? "Bild auch umschalten" : "Ton auch umschalten");
+        auch.setTextColor(Color.WHITE);
+        auch.setChecked(kamSrc.equals(tonSrc) && ton);   // Ton wählen, Bild war gleich: standardmäßig mitnehmen
+        for (int i = 0; i < n.length; i++) {
+            final int w = i;
+            TextView t = text(18, Color.WHITE);
+            t.setText(n[i]);
+            t.setPadding(0, dp(12), 0, dp(12));
+            t.setOnClickListener(v -> {
+                dlg.dismiss();
+                String src = w == 0 ? "" : k.optJSONObject(w).optString("src");
+                kamSetzen(ton || auch.isChecked() ? src : tonSrc, !ton || auch.isChecked() ? src : kamSrc);
+            });
+            box.addView(t);
+        }
+        box.addView(auch);
+        dlg.setView(box);
+        dlg.show();
+    }
+
+    private void kamSetzen(String ton, String bild) {
+        boolean tonNeu = !ton.equals(tonSrc);
+        tonSrc = ton; kamSrc = bild;
+        String an = String.valueOf(!kamSrc.equals(tonSrc));
+        if (tonNeu) {   // Hauptverbindung neu zur Ton-Quelle (Mikro im Modus "schnell" spricht dorthin)
+            js("kamAn=" + an + ";" + startJs(Anruf.zustand == Anruf.AKTIV));
+            if ("gemischt".equals(modus) && !tonSrc.isEmpty()) hinweis("Modus „gemischt“: dein Mikro geht weiter an die Tür");
+            else if (!tonSrc.isEmpty()) hinweis("Ton jetzt von " + kamName(tonSrc));
+        } else js("kam(" + an + ")");
+        kamZeigen();
     }
 
     private void js(String code) { h.post(() -> { if (web != null) web.evaluateJavascript(code, null); }); }
@@ -1423,11 +1467,11 @@ public class Gespraech extends Activity {
     final class Bruecke {
         /** JS hat ein Angebot (SDP): erst direkt an go2rtc im Heimnetz, sonst über Home Assistant von unterwegs. */
         @JavascriptInterface
-        public void angebot(String sdp) { signal(sdp, Anruf.cfg.optString("src"), "antwort"); }
+        public void angebot(String sdp) { signal(sdp, tonSrc.isEmpty() ? Anruf.cfg.optString("src") : tonSrc, "antwort"); }
 
         /** Zweite Verbindung nur fürs Bild einer anderen Kamera (Kamera wechseln, 2026-11-22). */
         @JavascriptInterface
-        public void angebot2(String sdp) { if (!kamSrc.isEmpty()) signal(sdp, kamSrc, "antwort2"); }
+        public void angebot2(String sdp) { if (!kamSrc.equals(tonSrc)) signal(sdp, kamSrc.isEmpty() ? Anruf.cfg.optString("src") : kamSrc, "antwort2"); }
 
         private void signal(String sdp, String src, String fn) {
             new Thread(() -> {
