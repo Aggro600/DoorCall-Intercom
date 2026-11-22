@@ -27,6 +27,7 @@ final class HausAudio {
     private static final int RATE = 16000, FRAME = 640;   // 20 ms
     private static volatile boolean laeuft;
     static volatile boolean stumm;
+    static volatile boolean tonAus;   // Ton-Knopf "Aus": Gegenseite nicht abspielen
     private static Thread auf, ab;
 
     private HausAudio() {}
@@ -39,6 +40,7 @@ final class HausAudio {
     static synchronized void start(JSONObject cfg) {
         if (laeuft) return;
         laeuft = true;
+        tonAus = false;
         auf = new Thread(() -> senden(cfg), "hausruf-mik");
         ab = new Thread(() -> hoeren(cfg), "hausruf-hoeren");
         auf.start();
@@ -116,7 +118,10 @@ final class HausAudio {
                         InputStream in = c.getInputStream();
                         Log.i(Anruf.TAG, "Hausruf hört zu (" + basis + ")");
                         int n;
-                        while (laeuft && (n = in.read(buf)) > 0) spur.write(buf, 0, n);
+                        while (laeuft && (n = in.read(buf)) > 0) {
+                            if (tonAus) java.util.Arrays.fill(buf, 0, n, (byte) 0);
+                            spur.write(buf, 0, n);
+                        }
                     } catch (Exception e) {
                         Log.w(Anruf.TAG, "Hausruf hören " + basis + ": " + e);
                     } finally { if (c != null) c.disconnect(); }

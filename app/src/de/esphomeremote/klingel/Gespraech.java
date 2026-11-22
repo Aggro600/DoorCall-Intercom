@@ -82,7 +82,7 @@ public class Gespraech extends Activity {
 
     private String tuerText() { return tuerName().isEmpty() ? "🔓  Tür sofort öffnen" : "🔓  " + tuerName() + " öffnen"; }
     private TextView tuerOben;   // "Tür sofort öffnen" oben über dem Kamerabild (Nutzer 2026-11-21), zweimal tippen
-    private boolean mitMikro, stumm = true, laut = true, oeffnenScharf;   // Mikrofon startet stumm (Nutzer 2026-11-20)
+    private boolean mitMikro, stumm = true, laut = true, tonAus, oeffnenScharf;   // tonAus: dritter Zustand des Ton-Knopfs (2026-11-22)   // Mikrofon startet stumm (Nutzer 2026-11-20)
     private View knopfMikro, knopfLaut, knopfTuer;
     private int letzterZustand = -1;
     private boolean seiteBereit;
@@ -702,7 +702,8 @@ public class Gespraech extends Activity {
                 knopfSetzen(knopfMikro, stumm ? R.drawable.ic_mic_aus : R.drawable.ic_mic, "Startet …", GELB);
             else knopfSetzen(knopfMikro, stumm ? R.drawable.ic_mic_aus : R.drawable.ic_mic, stumm ? "Stumm" : "Mikrofon",
                     stumm ? ROT : KACHEL);   // stumm: rot, damit das weiße Symbol sichtbar bleibt
-            knopfSetzen(knopfLaut, laut ? R.drawable.ic_laut : R.drawable.ic_ohr, laut ? "Lautsprecher" : "Hörer", BLAU);
+            if (tonAus) knopfSetzen(knopfLaut, R.drawable.ic_laut_aus, "Ton aus", ROT);
+            else knopfSetzen(knopfLaut, laut ? R.drawable.ic_laut : R.drawable.ic_ohr, laut ? "Lautsprecher" : "Hörer", BLAU);
         }
     }
 
@@ -1065,11 +1066,22 @@ public class Gespraech extends Activity {
         } catch (Exception e) { return true; }
     }
 
+    /** Ton-Knopf: Lautsprecher -> Hörer (nur wenn vorhanden) -> Aus (kein Ton von der Gegenseite) -> Lautsprecher. */
     private void lautSchalten() {
-        if (laut && !hoererDa()) { hinweis("Dieses Gerät hat keinen Hörer – Ton kommt über den Lautsprecher"); return; }
-        laut = !laut;
-        if (Anruf.verbindung != null) Anruf.verbindung.lautsprecher(laut);
+        if (tonAus) {
+            tonAus = false; laut = true;
+            if (Anruf.verbindung != null) Anruf.verbindung.lautsprecher(true);
+        } else if (laut && hoererDa()) {
+            laut = false;
+            if (Anruf.verbindung != null) Anruf.verbindung.lautsprecher(false);
+        } else tonAus = true;
+        tonSetzen();
         zustandZeigen();
+    }
+
+    private void tonSetzen() {
+        HausAudio.tonAus = tonAus;
+        js("tonAus(" + tonAus + ")");
     }
 
     private void tuerSetzen(String t, int farbe) {
@@ -1304,7 +1316,7 @@ public class Gespraech extends Activity {
     private final java.util.concurrent.LinkedBlockingQueue<byte[]> mikQ = new java.util.concurrent.LinkedBlockingQueue<>();
     private volatile Thread mikFaden;
 
-    private String startJs(boolean mikro) { return "start(" + mikro + "," + stumm + "," + "gemischt".equals(modus) + ")"; }
+    private String startJs(boolean mikro) { return "aus=" + tonAus + ";start(" + mikro + "," + stumm + "," + "gemischt".equals(modus) + ")"; }
 
     /** Modus gemischt: Mikrofon als endloser POST an Home Assistant (/api/esphomeremote/klingel_mik), nur solange nicht stumm. */
     private void mikHochStarten() {
@@ -1580,7 +1592,7 @@ public class Gespraech extends Activity {
             + "video{width:100%;height:100%;object-fit:contain;background:#000}#w{position:absolute;left:0;top:0;display:none}</style></head><body>"
             + "<video id=v autoplay playsinline muted poster='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'></video>"
             + "<video id=w autoplay playsinline muted></video><script>"
-            + "let pc=null,mik=null,ctx=null,proc=null,leise=true,pc2=null,kamAn=false;const v=document.getElementById('v'),w=document.getElementById('w');"
+            + "let pc=null,mik=null,ctx=null,proc=null,leise=true,pc2=null,kamAn=false,aus=false,mm=false;const v=document.getElementById('v'),w=document.getElementById('w');"
             // Kamera wechseln: zweite Verbindung nur mit Bild, liegt über dem Türbild; Ton (und Mikro) bleiben bei der Tür
             + "function kamZu(){if(pc2){pc2.close();pc2=null}w.style.display='none';w.srcObject=null}"
             + "function kam(an){kamAn=an;kamZu();if(an)kam2()}"
@@ -1600,10 +1612,10 @@ public class Gespraech extends Activity {
             + "   for(let k=a;k<z;k++)s+=f[k];let w=s/(z-a)*32767;b[i]=w>32767?32767:w<-32768?-32768:w}"
             + "  const u=new Uint8Array(b.buffer);let t='';for(let i=0;i<u.length;i++)t+=String.fromCharCode(u[i]);A.pcm(btoa(t))};"
             + " q.connect(proc);proc.connect(ctx.destination);A.meldung('Mischer-Mikro '+ctx.sampleRate+' Hz')}catch(e){A.meldung('! Mischer: '+e)}}"
-            + "async function start(mitMik,st,gem){stop();leise=st;"
+            + "async function start(mitMik,st,gem){stop();leise=st;mm=mitMik;"
             + " try{pc=new RTCPeerConnection({iceServers:[]});"
             + "  const ms=new MediaStream();"
-            + "  pc.ontrack=e=>{ms.addTrack(e.track);v.srcObject=ms;v.muted=!mitMik;v.play().catch(()=>{})};"
+            + "  pc.ontrack=e=>{ms.addTrack(e.track);v.srcObject=ms;v.muted=!mitMik||aus;v.play().catch(()=>{})};"
             + "  pc.onconnectionstatechange=()=>{A.meldung('Verbindung '+pc.connectionState);"
             + "   if(pc.connectionState==='failed')A.meldung('! Verbindung abgebrochen')};"
             + "  pc.addTransceiver('video',{direction:'recvonly'});"
@@ -1620,6 +1632,7 @@ public class Gespraech extends Activity {
             + "  A.angebot(pc.localDescription.sdp);if(kamAn)kam2()"
             + " }catch(e){A.meldung('! '+e)}}"
             + "async function antwort(sdp){try{await pc.setRemoteDescription({type:'answer',sdp})}catch(e){A.meldung('! '+e)}}"
+            + "function tonAus(a){aus=a;v.muted=a||!mm}"
             + "function stumm(s){leise=s;if(mik)mik.getAudioTracks().forEach(t=>t.enabled=!s)}"
             + "</script></body></html>";
 }

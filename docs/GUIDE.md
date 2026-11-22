@@ -80,6 +80,8 @@ Groups (e.g. "Phones", "Home") are created in the **"Groups"** card at the botto
 - All configured devices ring like a phone call (also on the lock screen); the caller picture is the door camera.
 - **While ringing** you already see live video and – if enabled – can open the door.
 - **Answer**: video and audio from the door; your own microphone starts **muted** (left dock button).
+- **Sound button** (middle of the dock) switches **Speaker → Earpiece → Sound off**: with "Sound off" you hear nothing from the other side
+  (video, mic and switches keep working). Devices without earpiece switch between speaker and off.
 - Pull up **"⌃ Switches & replies"**: open door, switches, quick replies, own buttons.
 - Volume keys: in the app settings choose whether they control call or media volume.
 - Missed? You get a notification with a photo and the history **"Who was there"** in the app.
@@ -125,6 +127,7 @@ device hears all others.
   3. the logged-in user has only one device.
   Only if that is ambiguous it asks once "Which device is this?". The window shows "From: … (detected)"; "other device"
   pins a device, "↺ Detect automatically" resets. After that: pick the target – done.
+  The window is a regular Home Assistant dialog: the back button or the ✕ closes it.
 - **Dashboard button via the app** – opens the selection of the app "Türklingel" on the device where it is pressed:
   ```yaml
   type: button

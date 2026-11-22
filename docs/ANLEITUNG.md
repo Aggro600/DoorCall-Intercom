@@ -83,6 +83,8 @@ Gruppen (z. B. „Handys“, „Wohnung“) legt man unten in der Karte **„Gru
 - Alle eingestellten Geräte klingeln wie bei einem Telefonanruf (auch im Sperrbildschirm), Anruferbild = Türkamera.
 - Schon **während des Klingelns** sieht man das Live-Bild und kann – wenn freigegeben – die Tür öffnen.
 - **Annehmen**: Bild und Ton von der Tür, das eigene Mikrofon ist zuerst **stumm** (Knopf links im Dock).
+- **Ton-Knopf** (Mitte im Dock) schaltet **Lautsprecher → Hörer → Ton aus**: bei „Ton aus“ hört man nichts von der Gegenseite
+  (Bild, Mikrofon und Schalter gehen weiter). Geräte ohne Hörer wechseln zwischen Lautsprecher und Aus.
 - Unten **„⌃ Schalter & Ansagen“** aufziehen: Tür öffnen, Schalter, Schnellantworten, eigene Knöpfe.
 - Lautstärketasten: in den App-Einstellungen wählbar, ob sie die Anruf- oder die Medienlautstärke stellen.
 - Verpasst? Es gibt eine Meldung mit Foto und den Verlauf **„Wer war da“** in der App.
@@ -128,6 +130,7 @@ dass jedes Gerät alle anderen hört.
   3. der angemeldete Benutzer hat nur ein Gerät.
   Nur wenn das nicht eindeutig ist, fragt sie einmal „Welches Gerät ist das?“. Im Fenster steht „Von: … (erkannt)“;
   über „anderes Gerät“ lässt es sich fest einstellen, „↺ Automatisch erkennen“ stellt zurück. Danach: Ziel wählen – fertig.
+  Das Fenster ist ein normaler Home-Assistant-Dialog: Zurück-Taste oder ✕ schließt es.
 - **Dashboard-Knopf über die App** – öffnet die Auswahl der App „Türklingel“ auf dem Gerät, auf dem gedrückt wird:
   ```yaml
   type: button
