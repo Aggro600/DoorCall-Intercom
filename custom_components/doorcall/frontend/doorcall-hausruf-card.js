@@ -43,13 +43,22 @@ class DoorCallHausrufCard extends HTMLElement {
       ...geraete.filter((g) => g.id !== ich())];
     this._fenster("Hausruf an …", `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Von: <b>${esc(von ? von.name : ich())}</b>
         · <a href="#" data-wer style="color:var(--primary-color)">anderes Gerät</a></p>`,
-      ziele.map((z) => ({ text: z.name, los: () => this._rufen(z.id) })),
+      ziele.map((z) => ({ text: z.name, los: () => this._art(z, geraete) })),
       (box) => { box.querySelector("[data-wer]").onclick = (e) => { e.preventDefault(); this._wer(geraete, d); }; });
   }
 
-  async _rufen(an) {
+  _art(z, geraete) {
+    const auto = z.id === "alle" || z.id.startsWith("gruppe:") ? geraete.some((g) => g.auto && g.id !== ich()) : geraete.some((g) => g.id === z.id && g.auto);
+    this._fenster("Hausruf an " + z.name, `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Wie soll es klingeln?</p>`, [
+      { text: "🔔  Normal – wie am Gerät eingestellt", los: () => this._rufen(z.id, "normal") },
+      { text: "🔊  Laut – Lautstärke erzwingen", los: () => this._rufen(z.id, "laut") },
+      ...(auto ? [{ text: "⚡  Direkt durchstellen – nimmt automatisch an", los: () => this._rufen(z.id, "durchstellen") }] : []),
+    ]);
+  }
+
+  async _rufen(an, art = this._c.art || "normal") {
     try {
-      await this._hass.callService("doorcall", "hausruf", { von: ich(), an: [an] });
+      await this._hass.callService("doorcall", "hausruf", { von: ich(), an: [an], art });
       this._fenster("Hausruf", "<p>Ruft an … Das Gesprächsfenster öffnet sich in der App „Türklingel“.</p>", []);
       setTimeout(() => this._zu(), 2500);
     } catch (e) {

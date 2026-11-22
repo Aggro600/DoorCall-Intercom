@@ -213,7 +213,7 @@ public final class Anruf {
         } catch (Exception e) { Log.w(TAG, "Telecom: " + e); }
         if (!ueberTelecom) klingelnZeigen(c);    // ohne Telecom: nur Benachrichtigung
         lautKlingeln(c);
-        if (haus()) {   // Hausruf: Anruffenster gleich zeigen (geht aus dem Hintergrund mit "Über anderen Apps anzeigen")
+        if (haus() || cfg.optBoolean("fenster")) {   // Hausruf / Gerät mit "Klingelfenster sofort": Fenster mit Live-Bild gleich zeigen (geht aus dem Hintergrund mit "Über anderen Apps anzeigen")
             try { c.startActivity(new Intent(c, Gespraech.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
             catch (Exception e) { Log.i(TAG, "Hausruf-Fenster: " + e); }
         }
@@ -317,7 +317,8 @@ public final class Anruf {
             }
         });
         tonKoppeln(c, true);
-        if (haus()) { HausAudio.stumm = false; HausAudio.start(cfg); }   // Hausruf: Mikro gleich offen
+        // Hausruf: Mikro gleich offen - außer beim "Direkt durchstellen" (hier hat man nicht selbst angenommen)
+        if (haus()) { HausAudio.stumm = cfg.optBoolean("gezwungen"); HausAudio.start(cfg); }
         aktualisieren();
     }
 

@@ -28,7 +28,8 @@ public class HausrufWahl extends Activity {
         if (an != null && !an.trim().isEmpty()) {
             JSONArray z = new JSONArray();
             for (String s : an.split(",")) if (!s.trim().isEmpty()) z.put(s.trim());
-            starten(z);
+            String art = u.getQueryParameter("art");
+            starten(z, art == null ? "normal" : art);
             return;
         }
         Anruf.anHa(this, "hausruf_ziele", null, r -> {
@@ -42,16 +43,28 @@ public class HausrufWahl extends Activity {
             for (int i = 0; i < namen.length; i++) namen[i] = z.optJSONObject(i).optString("name");
             new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("Hausruf an …")
-                    .setItems(namen, (d, w) -> starten(new JSONArray().put(z.optJSONObject(w).optString("id"))))
+                    .setItems(namen, (d, w) -> artWaehlen(this, z.optJSONObject(w).optString("name"), art -> starten(new JSONArray().put(z.optJSONObject(w).optString("id")), art), this::finish))
                     .setNegativeButton("Abbrechen", (d, w) -> finish())
                     .setOnCancelListener(d -> finish())
                     .show();
         });
     }
 
-    private void starten(JSONArray ziele) {
+    /** Wie soll es klingeln? normal / laut / durchstellen (2026-11-22). */
+    static void artWaehlen(android.app.Activity a, String ziel, java.util.function.Consumer<String> fertig, Runnable abbruch) {
+        String[] namen = {"🔔  Normal – wie am Gerät eingestellt", "🔊  Laut – Lautstärke erzwingen", "⚡  Direkt durchstellen – nimmt automatisch an"};
+        String[] werte = {"normal", "laut", "durchstellen"};
+        new AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Hausruf an " + ziel)
+                .setItems(namen, (d, w) -> fertig.accept(werte[w]))
+                .setNegativeButton("Abbrechen", (d, w) -> { if (abbruch != null) abbruch.run(); })
+                .setOnCancelListener(d -> { if (abbruch != null) abbruch.run(); })
+                .show();
+    }
+
+    private void starten(JSONArray ziele, String art) {
         JSONObject x = new JSONObject();
-        try { x.put("ziele", ziele); } catch (Exception ignored) {}
+        try { x.put("ziele", ziele).put("art", art); } catch (Exception ignored) {}
         Anruf.anHa(this, "hausruf_start", x, rr -> {
             Toast.makeText(this, rr == null ? "Home Assistant nicht erreichbar" : rr.optString("text"), Toast.LENGTH_LONG).show();
             finish();

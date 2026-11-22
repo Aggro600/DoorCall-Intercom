@@ -59,12 +59,12 @@ public class Start extends Activity {
             for (int i = 0; i < namen.length; i++) namen[i] = z.optJSONObject(i).optString("name");
             new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("Hausruf an …")
-                    .setItems(namen, (d, w) -> {
+                    .setItems(namen, (d, w) -> HausrufWahl.artWaehlen(this, z.optJSONObject(w).optString("name"), art -> {
                         JSONObject x = new JSONObject();
-                        try { x.put("ziele", new org.json.JSONArray().put(z.optJSONObject(w).optString("id"))); } catch (Exception ignored) {}
+                        try { x.put("ziele", new org.json.JSONArray().put(z.optJSONObject(w).optString("id"))).put("art", art); } catch (Exception ignored) {}
                         Anruf.anHa(this, "hausruf_start", x, rr -> android.widget.Toast.makeText(this,
                                 rr == null ? "Home Assistant nicht erreichbar" : rr.optString("text"), android.widget.Toast.LENGTH_LONG).show());
-                    })
+                    }, null))
                     .setNegativeButton("Abbrechen", null)
                     .show();
         });
@@ -165,6 +165,15 @@ public class Start extends Activity {
                 + "Mikrofon anmacht, schaltet den vorigen stumm. Gemischt: Home Assistant mischt alle Mikrofone, mehrere können "
                 + "gleichzeitig reden, die Stimme kommt aber etwa 0,3–0,8 s später draußen an. Gilt, wenn du das Gespräch "
                 + "leitest; im Gespräch kannst du jederzeit umstellen.", 13, Gespraech.GRAU);
+        String sp2 = Anruf.prefs(this).getString("sparen", "aus");
+        knopf("Datensparmodus: " + ("immer".equals(sp2) ? "immer" : "mobil".equals(sp2) ? "nur mit mobilen Daten" : "aus") + " …", () -> {
+            final String[] werte = {"aus", "mobil", "immer"};
+            String[] namen = {"Aus – immer Live-Video", "Nur mit mobilen Daten (unterwegs)", "Immer"};
+            new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("Datensparmodus")
+                    .setItems(namen, (d, w) -> { Anruf.prefs(this).edit().putString("sparen", werte[w]).apply(); zeigen(); }).show();
+        });
+        zeile("Datensparmodus: statt Live-Video ein Standbild der Tür mit „Aktualisieren“ – spart Daten unterwegs. Mit „Live starten“ "
+                + "geht das Video (und Sprechen) trotzdem jederzeit an.", 13, Gespraech.GRAU);
         int ks = Anruf.prefs(this).getInt("klingel_s", 0);
         knopf("Klingeln: " + (ks > 0 ? ks + " Sekunden" : "wie in Home Assistant (" + Anruf.letzter(this).optInt("dauer", 30) + " s)") + " …", () -> {
             final int[] werte = {0, 15, 20, 30, 45, 60, 90, 120};

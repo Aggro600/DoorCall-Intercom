@@ -30,7 +30,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.11"
+VERSION_JS = "2026.11.22.12"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -142,18 +142,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ansichten(hass)
     if not hass.data.get(DOMAIN + "_ws"):
         hass.data[DOMAIN + "_ws"] = True
-        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen, ws_freigabe, ws_ruhe, ws_ziele):
+        for fn in (ws_get, ws_save, ws_gruppen, ws_info, ws_test, ws_suchen, ws_freigabe, ws_ruhe, ws_ziele, ws_geraet_einst):
             websocket_api.async_register_command(hass, fn)
     await _panel(hass)
     _einrichten_planen(hass, entry, t)
     if not hass.services.has_service(DOMAIN, "hausruf"):
         async def _hausruf(call: ServiceCall) -> None:
-            aid, text = await _t(hass).hausruf(call.data["von"], call.data.get("an") or ["alle"])
+            aid, text = await _t(hass).hausruf(call.data["von"], call.data.get("an") or ["alle"], call.data.get("art", "normal"))
             if not aid:
                 raise HomeAssistantError(text)
         hass.services.async_register(DOMAIN, "hausruf", _hausruf, schema=vol.Schema({
             vol.Required("von"): vol.Match(r"^mobile_app_[a-z0-9_]+$"),
-            vol.Optional("an"): vol.All(cv.ensure_list, [cv.string])}))
+            vol.Optional("an"): vol.All(cv.ensure_list, [cv.string]),
+            vol.Optional("art", default="normal"): vol.In(["normal", "laut", "durchstellen"])}))
     return True
 
 
@@ -254,6 +255,7 @@ def ws_info(hass, connection, msg) -> None:
                                        "gruppen": t.gruppen(), "app": t.app_geraete(), "freigabe": t.freigabe(),
                                        "verbunden": list(t.daten.get("app_geraete") or []),
                                        "ruhe": t.daten.get("ruhe") or {},
+                                       "geraete_einst": t.daten.get("geraete_einst") or {},
                                        "zonen": [{"id": z.entity_id, "name": z.attributes.get("friendly_name") or z.entity_id}
                                                  for z in hass.states.async_all("zone") if z.attributes.get("radius")]})
 
@@ -315,5 +317,18 @@ def ws_ziele(hass, connection, msg) -> None:
     """Für die Dashboard-Karte (auch ohne Admin): Geräte mit App (Name) und Gruppen."""
     t = _t(hass)
     connection.send_result(msg["id"], {
-        "geraete": [{"id": g, "name": t.name(g)} for g in t.app_geraete()],
+        "geraete": [{"id": g, "name": t.name(g), "auto": bool(t.geraet_einst(g).get("auto"))} for g in t.app_geraete()],
         "gruppen": [{"id": f"gruppe:{gr['name']}", "name": gr["name"]} for gr in t.gruppen()]})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "doorcall/geraet_einst", vol.Required("einst"): {
+    vol.Match(r"^mobile_app_[a-z0-9_]+$"): {vol.Optional("laut"): vol.Any(None, vol.All(int, vol.Range(min=0, max=100))),
+                                          vol.Optional("fenster"): bool, vol.Optional("auto"): bool}}})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_geraet_einst(hass, connection, msg) -> None:
+    """Einstellungen je Gerät: Lautstärke beim Klingeln, Klingelfenster sofort, darf durchgestellt werden."""
+    t = _t(hass)
+    t.daten["geraete_einst"] = {g: {k: v for k, v in e.items() if v is not None or k == "laut"} for g, e in msg["einst"].items()}
+    await t.store.async_save(t.daten)
+    connection.send_result(msg["id"], {"geraete_einst": t.daten["geraete_einst"]})

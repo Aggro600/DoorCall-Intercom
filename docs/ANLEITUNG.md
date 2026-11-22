@@ -43,6 +43,12 @@ Karte **„Geräte für DoorCall“**:
 - **Alle Geräte automatisch**: jedes Gerät mit Home-Assistant-App.
 - **Aus**: es wird nichts neu eingerichtet.
 
+**Einstellungen je Gerät** (gleiche Karte):
+- **Lautstärke beim Klingeln**: „wie Klingel“, „wie am Gerät“ (normal, lautlos bleibt lautlos) oder ein fester Wert,
+  der erzwungen wird – z. B. Tablets 70 %, Handys „wie am Gerät“.
+- **Klingelfenster sofort**: beim Klingeln geht gleich das Fenster mit Live-Bild auf (gut für Tablets im Kiosk-Modus).
+- **Darf durchgestellt werden**: beim Hausruf „Direkt durchstellen“ nimmt das Gerät automatisch an.
+
 Ein Gerät **anhaken** genügt: DoorCall schickt ihm einen **stillen Gruß** (es klingelt nicht) mit den Adressen. Ist die
 App installiert, meldet sie sich und bekommt ein **✓**. Ab dann gehen Probeanruf und Hausruf. „Jetzt Geräte suchen“
 wiederholt das sofort; automatisch passiert es beim Start, bei neuen Geräten binnen 10 Minuten und alle 6 Stunden.
@@ -55,7 +61,10 @@ Karte je Klingel (**„Klingel hinzufügen“** für weitere):
 - **Mindestlautstärke** (siehe Abschnitt 9).
 - **Gesprächsrunde**: Mitschauen erlauben, Gäste dürfen bedienen, Sprech-Modus (Abschnitte 6 und 7).
 - **Tür öffnen mit** + **Knopf freigeben** – bewusst zweistufig; im Anruf muss man zweimal tippen.
-- **Schnellantworten** (Ansagen der Klingel, z. B. Reolink), optional „danach Tür öffnen“.
+- **Schnellantworten** (Ansagen der Klingel, z. B. Reolink), optional „danach Tür öffnen“, mit einer
+  **vorausgewählten** Ansage.
+- **Menü im Anruf**: Reihenfolge und Sichtbarkeit der Bereiche im aufgezogenen Blatt (Schnellantworten, Tür öffnen,
+  Gespräch, Schalter, eigene Knöpfe) – mit Pfeilen sortieren, mit Haken ein-/ausblenden.
 - Eigene **Knöpfe**, **Schalter mit Status** und **Anzeigen** (Schloss, Türkontakt …).
 - **Probeanruf** klingelt auf allen eingestellten Geräten.
 
@@ -76,6 +85,7 @@ Gruppen (z. B. „Handys“, „Wohnung“) legt man unten in der Karte **„Gru
   - **Mitschauen erlaubt/gesperrt** – sperren nimmt alle Gäste sofort raus (sie sehen, wer es beendet hat).
   - **Dazuholen …** – Geräte oder Gruppen anklingeln („Tablet Wohnzimmer holt dich dazu“).
   - **Sprechen**-Modus umstellen und **Mikros sperren** (Gäste hören dann nur zu).
+  - **Gäste dürfen mitleiten** – schaltet dieses Menü auch für alle anderen frei (Standard je Klingel einstellbar).
 - **Auflegen** als Leitung, während andere dabei sind: „Für alle beenden“ oder „Nur ich gehe – … übernimmt“.
 
 ## 7. Sprechen: schnell oder gemischt
@@ -118,6 +128,12 @@ dass jedes Gerät alle anderen hört.
   ```
 - **Automation/Skript**: Aktion `doorcall.hausruf` mit `von` (rufendes Gerät) und `an` (Liste, Standard „alle“).
 
+**Wie soll es klingeln?** Nach der Wahl des Ziels (App, Karte, Aktion mit `art:`):
+- **Normal** – wie am Gerät eingestellt,
+- **Laut** – Lautstärke erzwingen,
+- **Direkt durchstellen** – die Ziele nehmen automatisch an (nur Geräte mit „Darf durchgestellt werden“, deren
+  Mikrofon ist zuerst stumm; andere klingeln laut).
+
 **Im Gespräch** steht groß in der Mitte, wer dabei ist oder bei wem es noch klingelt. Haben alle anderen aufgelegt,
 erscheint gelb **„Du bist allein im Gespräch“** mit „Nochmal rufen“; nach 30 s legt die App von selbst auf.
 
@@ -128,6 +144,8 @@ erscheint gelb **„Du bist allein im Gespräch“** mit „Nochmal rufen“; na
   „Nicht stören“ per Tasker/Routine nach **Ort** schalten und den Modus **„Priorität“** nehmen – „Keine
   Unterbrechungen“ schaltet auch **Wecker** stumm.
 - **„Nicht stören“ in der App** (für 1 Stunde / bis Uhrzeit): Klingeln kommt nur still als Meldung.
+- **Datensparmodus** (App → Einstellungen: aus / nur mit mobilen Daten / immer): statt Live-Video ein Standbild der Tür
+  mit „Aktualisieren“; „Live starten“ schaltet Video und Sprechen bei Bedarf ein.
 
 ## 10. Ruhe-Zonen
 Optional in „Geräte für DoorCall“: Ist ein **Handy** in einer seiner Ruhe-Zonen (Home-Assistant-Zone), klingelt DoorCall

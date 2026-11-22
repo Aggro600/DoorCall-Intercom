@@ -10,3 +10,9 @@ hausruf:
       example: '["alle"]'
       selector:
         object:
+    art:
+      required: false
+      default: normal
+      selector:
+        select:
+          options: ["normal", "laut", "durchstellen"]

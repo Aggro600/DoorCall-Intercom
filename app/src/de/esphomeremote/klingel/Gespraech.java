@@ -518,7 +518,28 @@ public class Gespraech extends Activity {
     }
 
     /** Griff nur zeigen, wenn es etwas auszuklappen gibt. */
+    /** Bereiche im Blatt in der Reihenfolge aus DoorCall ("menue"), ausgeblendete verstecken (2026-11-22). */
+    private void menueAnwenden() {
+        org.json.JSONArray m = Anruf.cfg.optJSONArray("menue");
+        if (m == null || m.length() == 0 || klappe == null) return;
+        java.util.Map<String, View> v = new java.util.HashMap<>();
+        v.put("antwort", antwortZeile); v.put("tuer", tuerKlappe); v.put("leitung", leitungZeile);
+        v.put("schalter", schalterZeile); v.put("knoepfe", extras);
+        int pos = klappe.indexOfChild(tuerKlappe);
+        for (View x : v.values()) pos = Math.min(pos, Math.max(0, klappe.indexOfChild(x)));
+        for (int i = 0; i < m.length(); i++) {
+            JSONObject e = m.optJSONObject(i);
+            View x = e == null ? null : v.get(e.optString("id"));
+            if (x == null) continue;
+            ViewGroup.LayoutParams lp = x.getLayoutParams();
+            klappe.removeView(x);
+            klappe.addView(x, Math.min(pos++, klappe.getChildCount()), lp);
+            if (!e.optBoolean("an", true)) x.setVisibility(View.GONE);
+        }
+    }
+
     private void griffPruefen() {
+        menueAnwenden();
         boolean etwas = leitungZeile.getChildCount() > 0 || schalterZeile.getChildCount() > 0 || antwortZeile.getChildCount() > 0 || extras.getChildCount() > 0;
         griff.setVisibility(etwas && Anruf.zustand != Anruf.AUS && klappRahmen.getVisibility() != View.VISIBLE ? View.VISIBLE : View.GONE);
         if (!etwas) blattSetzen(0);
@@ -783,12 +804,13 @@ public class Gespraech extends Activity {
         rundeZeile.setText(sb);
         rundeZeile.setVisibility(sb.length() > 0 ? View.VISIBLE : View.GONE);
 
-        String schl = r.optBoolean("ich_leite") + "|" + r.optBoolean("frei") + "|" + r.optJSONArray("einladbar") + "|" + modus + "|" + t;
+        String schl = r.optBoolean("ich_leite") + "|" + r.optBoolean("darf_leiten") + "|" + r.optBoolean("gaeste_leiten") + "|" + r.optBoolean("frei") + "|" + r.optJSONArray("einladbar") + "|" + modus + "|" + t;
         if (schl.equals(leitungSchluessel)) return;
         leitungSchluessel = schl;
         leitungZeile.removeAllViews();
-        if (!r.optBoolean("ich_leite")) { griffPruefen(); return; }
-        leitungZeile.addView(ueberschrift("Gespräch – du leitest"));
+        boolean darf = r.optBoolean("darf_leiten", r.optBoolean("ich_leite"));
+        if (!darf) { griffPruefen(); return; }
+        leitungZeile.addView(ueberschrift(r.optBoolean("ich_leite") ? "Gespräch – du leitest" : "Gespräch – du darfst mitleiten"));
         LinearLayout reihe = new LinearLayout(this);
         boolean frei = r.optBoolean("frei");
         TextView m = text(15, frei ? Color.WHITE : SCHRIFT);
@@ -854,6 +876,23 @@ public class Gespraech extends Activity {
         ml.leftMargin = Anruf.haus() ? 0 : dp(8);
         reihe2.addView(ms, ml);
         leitungZeile.addView(reihe2, new LinearLayout.LayoutParams(rl));
+        if (r.optBoolean("ich_leite")) {   // nur die Leitung: Menü für alle freischalten
+            boolean gl = r.optBoolean("gaeste_leiten");
+            TextView gt = text(15, gl ? Color.WHITE : SCHRIFT);
+            gt.setGravity(Gravity.CENTER_VERTICAL);
+            gt.setText((gl ? "●  " : "○  ") + "Gäste dürfen mitleiten");
+            gt.setPadding(dp(12), dp(12), dp(8), dp(12));
+            gt.setMinHeight(dp(52));
+            GradientDrawable gg = kachel(gl ? BLAU : KACHEL, gl ? BLAU_HELL : RAND);
+            gt.setBackground(gg);
+            gt.setOnClickListener(vv -> {
+                gg.setColor(GELB);
+                JSONObject z = new JSONObject();
+                try { z.put("an", !gl); } catch (Exception ignored) {}
+                Anruf.abfragen("gaeste_leiten", -1, z, rr -> { if (rr != null) { hinweis(rr.optString("text")); statusZeigen(rr); } });
+            });
+            leitungZeile.addView(gt, new LinearLayout.LayoutParams(rl));
+        }
         griffPruefen();
     }
 
@@ -1103,11 +1142,13 @@ public class Gespraech extends Activity {
         for (int i = 0; i < texte.length; i++) texte[i] = l.optString(i);
         // Eigene Auswahl statt Spinner (2026-11-21): Liste als Dialog, auf dem Tablet breit (80 %), auf dem Handy fast volle Breite
         final int[] gewaehlt = {0};
+        String std = Anruf.cfg.optString("antwort_standard", "");   // in DoorCall vorausgewählt (2026-11-22)
+        for (int i = 0; i < texte.length; i++) if (texte[i].equals(std)) gewaehlt[0] = i;
         TextView auswahl = text(16, Color.WHITE);
         auswahl.setSingleLine(true);
         auswahl.setEllipsize(android.text.TextUtils.TruncateAt.END);
         auswahl.setGravity(Gravity.CENTER_VERTICAL);
-        auswahl.setText(texte[0] + "  ▾");
+        auswahl.setText(texte[gewaehlt[0]] + "  ▾");
         auswahl.setTextColor(SCHRIFT);
         auswahl.setBackground(kachel(KACHEL, RAND));
         auswahl.setPadding(dp(16), dp(14), dp(16), dp(14));
@@ -1264,7 +1305,70 @@ public class Gespraech extends Activity {
 
     private void mikHochStoppen() { mikFaden = null; }
 
+    private boolean liveErzwungen;
+    private android.widget.ImageView sparBild;
+    private LinearLayout sparLeiste;
+
+    /** Datensparmodus (2026-11-22): App-Einstellung "sparen" = aus | mobil (nur mobile Daten) | immer. */
+    private boolean sparen() {
+        String m = Anruf.prefs(this).getString("sparen", "aus");
+        if ("immer".equals(m)) return true;
+        if (!"mobil".equals(m)) return false;
+        try {
+            android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+            android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return nc != null && nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+                    && !nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI);
+        } catch (Exception e) { return false; }
+    }
+
+    private void sparBildHolen() {
+        hinweis("Lade Bild …");
+        new Thread(() -> {
+            android.graphics.Bitmap b = Anruf.bildHolen(Anruf.cfg, 8000);
+            h.post(() -> { if (sparBild != null && b != null) { sparBild.setImageBitmap(b); hinweis("Standbild " + new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.GERMANY).format(new java.util.Date())); }
+                else if (b == null) hinweis("Kein Bild"); });
+        }).start();
+    }
+
+    private void sparZeigen() {
+        if (sparBild == null) {
+            FrameLayout haupt = (FrameLayout) web.getParent();
+            sparBild = new android.widget.ImageView(this);
+            sparBild.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            sparBild.setBackgroundColor(Color.BLACK);
+            haupt.addView(sparBild, haupt.indexOfChild(web) + 1, new FrameLayout.LayoutParams(-1, -1));
+            sparLeiste = new LinearLayout(this);
+            sparLeiste.setGravity(Gravity.CENTER);
+            for (String[] k : new String[][]{{"⟳  Aktualisieren", "a"}, {"▶  Live starten", "l"}}) {
+                TextView t = text(16, Color.WHITE);
+                t.setText(k[0]);
+                t.setPadding(dp(18), dp(12), dp(18), dp(12));
+                t.setBackground(kachel(k[1].equals("l") ? BLAU : KACHEL, k[1].equals("l") ? BLAU_HELL : RAND));
+                t.setOnClickListener(v -> {
+                    if (k[1].equals("a")) sparBildHolen();
+                    else { liveErzwungen = true; sparLeiste.setVisibility(View.GONE); sparBild.setVisibility(View.GONE); web.setVisibility(View.VISIBLE); videoStarten(Anruf.zustand == Anruf.AKTIV); }
+                });
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+                lp.setMargins(dp(8), 0, dp(8), 0);
+                sparLeiste.addView(t, lp);
+            }
+            FrameLayout.LayoutParams sl = new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL);
+            sl.topMargin = dp(220);
+            haupt.addView(sparLeiste, haupt.indexOfChild(sparBild) + 1, sl);
+        }
+        sparBild.setVisibility(View.VISIBLE);
+        sparLeiste.setVisibility(View.VISIBLE);
+        web.setVisibility(View.INVISIBLE);
+        sparBildHolen();
+    }
+
     private void videoStarten(boolean mikro) {
+        if (!liveErzwungen && !Anruf.haus() && sparen()) {   // Datensparmodus: kein Video, Standbild mit Aktualisieren
+            mitMikro = mikro;
+            sparZeigen();
+            return;
+        }
         mitMikro = mikro;
         String go2rtc = Anruf.cfg.optString("go2rtc", "");
         if (go2rtc.isEmpty() || Anruf.cfg.optString("src", "").isEmpty()) { status.setText("Keine Kamera eingestellt"); return; }

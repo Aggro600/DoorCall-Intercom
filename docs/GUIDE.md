@@ -42,6 +42,12 @@ Card **"Devices for DoorCall"**:
 - **All devices automatically**: every device with the Home Assistant app.
 - **Off**: nothing new is set up.
 
+**Per-device settings** (same card):
+- **Ring volume**: "as doorbell", "as on the device" (normal, silent stays silent) or a fixed value that is enforced –
+  e.g. tablets 70 %, phones "as on the device".
+- **Open ring window right away**: when it rings, the window with live video opens at once (good for kiosk tablets).
+- **May be put through**: for Hausruf "put through directly" the device answers automatically.
+
 Ticking a device is enough: DoorCall sends it a **silent greeting** (no ringing) with its addresses. If the app is
 installed it answers and gets a **✓**; test call and Hausruf then work. "Search devices now" repeats this right away;
 it also happens at start-up, within 10 minutes for new devices and every 6 hours.
@@ -54,7 +60,10 @@ One card per doorbell (**"Add doorbell"** for more):
 - **Minimum ring volume** (see section 9).
 - **Call round**: allow watching along, guests may operate, speaking mode (sections 6 and 7).
 - **Open door with** + **enable the button** – deliberately two steps; in the call you tap twice.
-- **Quick replies** (doorbell announcements, e.g. Reolink), optionally "open the door afterwards".
+- **Quick replies** (doorbell announcements, e.g. Reolink), optionally "open the door afterwards", with a
+  **pre-selected** reply.
+- **Menu in the call**: order and visibility of the sections in the pulled-up sheet (quick replies, open door, call,
+  switches, own buttons) – sort with arrows, show/hide with ticks.
 - Own **buttons**, **switches with state** and **displays** (lock, door contact …).
 - **Test call** rings on all configured devices.
 
@@ -75,6 +84,7 @@ Groups (e.g. "Phones", "Home") are created in the **"Groups"** card at the botto
   - **Watching allowed/locked** – locking removes all guests at once (they see who ended it).
   - **Bring in …** – ring devices or groups ("Living room tablet brings you in").
   - Switch the **speaking mode** and **lock microphones** (guests then only listen).
+  - **Guests may co-lead** – unlocks this menu for everyone (default per doorbell).
 - **Hanging up** as lead while others are in: "End for everyone" or "Only I leave – … takes over".
 
 ## 7. Speaking: fast or mixed
@@ -117,6 +127,12 @@ device hears all others.
   ```
 - **Automation/script**: action `doorcall.hausruf` with `von` (calling device) and `an` (list, default "alle").
 
+**How should it ring?** After choosing the target (app, card, action with `art:`):
+- **Normal** – as set on the device,
+- **Loud** – force the volume,
+- **Put through directly** – targets answer automatically (only devices with "may be put through", their mic starts
+  muted; others ring loudly).
+
 **During the call** the middle of the screen shows who is in, or where it is still ringing. When everybody else has hung
 up you see a yellow **"You are alone in the call"** with "Call again"; after 30 s the app hangs up by itself.
 
@@ -126,6 +142,8 @@ up you see a yellow **"You are alone in the call"** with "Call again"; after 30 
 - The phone's **Do Not Disturb** is respected: while it is on, the app does not ring through. Tip: switch DND at work by
   **location** (Tasker/Routines) and use **"Priority"** – "Total silence" also mutes **alarm clocks**.
 - **"Do not disturb" inside the app** (for 1 hour / until a time): rings only arrive as a silent notification.
+- **Data saver** (app → settings: off / only on mobile data / always): a still image of the door with "Refresh" instead
+  of live video; "Start live" turns on video and talking when needed.
 
 ## 10. Quiet zones
 Optional in "Devices for DoorCall": while a **phone** is in one of its quiet zones (Home Assistant zone), DoorCall does

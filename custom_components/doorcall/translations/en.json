@@ -22,6 +22,10 @@
         "an": {
           "name": "To",
           "description": "Devices, \"gruppe:<name>\" or \"alle\" (all devices with the app). Default: all."
+        },
+        "art": {
+          "name": "Mode",
+          "description": "normal (as set on the device), laut (force volume) or durchstellen (targets answer automatically – only approved devices)."
         }
       }
     }

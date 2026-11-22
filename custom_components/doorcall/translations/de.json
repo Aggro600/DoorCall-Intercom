@@ -22,6 +22,10 @@
         "an": {
           "name": "An",
           "description": "Geräte, \"gruppe:<Name>\" oder \"alle\" (alle Geräte mit der App). Standard: alle."
+        },
+        "art": {
+          "name": "Art",
+          "description": "normal (wie am Gerät eingestellt), laut (Lautstärke erzwingen) oder durchstellen (Ziele nehmen automatisch an – nur freigegebene Geräte)."
         }
       }
     }

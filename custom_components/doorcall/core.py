@@ -128,11 +128,30 @@ def validate_anruf(a) -> dict:
             "laut": max(0, min(100, int(a.get("laut", 70) if a.get("laut") is not None else 70))),
             "gaeste_bedienen": a.get("gaeste_bedienen", True) is not False,
             "antwort": an, "antwort_oeffnen_s": max(0, min(60, int(a.get("antwort_oeffnen_s") or 8))),
+            # 2026-11-22: vorausgewählte Schnellantwort, Reihenfolge/Sichtbarkeit der Bereiche im Blatt, Gäste dürfen mitleiten
+            "antwort_standard": str(a.get("antwort_standard") or "").strip()[:120],
+            "menue": _menue(a.get("menue")),
+            "gaeste_leiten": bool(a.get("gaeste_leiten")),
             "geraete": geraete, "go2rtc": go2rtc, "src": src, "dauer": max(10, min(120, int(a.get("dauer") or 30))),
             "oeffnen": oe, "oeffnen_frei": bool(a.get("oeffnen_frei")) and bool(oe), "aktionen": aktionen,
             # 2026-11-21: Schalter mit Status (z. B. "Nach Klingeln öffnen") und reine Anzeigen (Schloss, Türkontakt)
             "schalter": liste(a.get("schalter"), 4, SCHALTER_DOMAINS, "Schalter"),
             "anzeigen": liste(a.get("anzeigen"), 3, None, "Anzeige")}
+
+
+MENUE_BEREICHE = ("antwort", "tuer", "leitung", "schalter", "knoepfe")   # Schnellantworten, Tür öffnen, Gespräch, Schalter, eigene Knöpfe
+
+
+def _menue(roh) -> list[dict]:
+    """[{"id": Bereich, "an": bool}] in gewünschter Reihenfolge; fehlende Bereiche hinten, sichtbar."""
+    out, gesehen = [], set()
+    for x in roh or []:
+        i = str((x or {}).get("id") or "")
+        if i in MENUE_BEREICHE and i not in gesehen:
+            gesehen.add(i)
+            out.append({"id": i, "an": (x or {}).get("an", True) is not False})
+    out += [{"id": i, "an": True} for i in ("tuer", "leitung", "schalter", "antwort", "knoepfe") if i not in gesehen]
+    return out
 
 
 def _b64(d: dict) -> str:
@@ -210,6 +229,7 @@ class Tuerklingel:
         schluessel = {g: secrets.token_urlsafe(18) for g in geraete}   # je Gerät, für Signal + Rückmeldung von unterwegs
         self.anrufe[aid] = {"kid": kid, "start": jetzt, "geraete": list(geraete), "angenommen": 0.0, "von": "",
                             "schluessel": schluessel, "teil": {}, "frei": a.get("mitschauen", True), "sprecher": "",
+                            "gaeste_leiten": bool(a.get("gaeste_leiten")),
                             "eingeladen": [], "ende": 0.0, "modus": a.get("sprechen", "einer"), "gesperrt": [],
                             "sprecher_set": []}
         for g in geraete:
@@ -232,10 +252,13 @@ class Tuerklingel:
              "ha": f"http://{self.basis()}", "bild": bool(k.get("kamera")),
              "aktionen": [y["name"] for y in a.get("aktionen") or []], **self.status(k),
              "antworten": self._antworten(a), "antwort_oeffnen_s": a.get("antwort_oeffnen_s", 8),
-             "modus": x.get("modus", "einer"), "api": API, "laut": a.get("laut", 70), **extra}
+             "modus": x.get("modus", "einer"), "api": API, "laut": self.laut_fuer(g, a.get("laut", 70)),
+             "fenster": bool(self.geraet_einst(g).get("fenster")), "antwort_standard": a.get("antwort_standard", ""),
+             "menue": a.get("menue") or _menue(None), **extra}
         if x.get("art") == "haus":   # Hausruf: keine Kamera, keine Tür - nur Gegensprechen zwischen den Geräten
             erste = ((self.daten.get("klingeln") or [{}])[0].get("anruf") or {})
-            d.update({"laut": erste.get("laut", 70), "name": "Hausruf", "art": "haus", "go2rtc": "", "src": "", "oeffnen": False, "bild": False,
+            laut = 0 if x.get("laut_modus") == "normal" else self.laut_fuer(g, erste.get("laut", 70), x.get("laut_modus") == "laut")
+            d.update({"laut": laut, "name": "Hausruf", "gezwungen": bool(extra.get("gezwungen")), "art": "haus", "go2rtc": "", "src": "", "oeffnen": False, "bild": False,
                       "aktionen": [], "schalter": [], "anzeigen": [], "antworten": [], "dauer": 45,
                       "von_name": self.name(x.get("starter", ""))})
         if ext := self.extern():   # unterwegs: Signal über HA ({API}/signal), Rückmeldung über den öffentlichen Webhook
@@ -312,6 +335,17 @@ class Tuerklingel:
                 out.append(g)
         return out
 
+    def geraet_einst(self, g: str) -> dict:
+        """Einstellungen je Gerät (2026-11-22): laut (None = wie Klingel, 0 = wie am Gerät, 10-100 %), fenster
+        (Klingelfenster mit Video sofort öffnen), auto (darf beim Hausruf automatisch angenommen werden)."""
+        return (self.daten.get("geraete_einst") or {}).get(g) or {}
+
+    def laut_fuer(self, g: str, klingel_laut: int, erzwingen: bool = False) -> int:
+        v = self.geraet_einst(g).get("laut")
+        if v is None:
+            return int(klingel_laut or 0)
+        return int(v) if (v or not erzwingen) else int(klingel_laut or 70)
+
     def erlaubt(self, g: str) -> bool:
         f = self.freigabe()
         return f["modus"] == "alle" or g in f["geraete"]
@@ -340,8 +374,11 @@ class Tuerklingel:
         return ziele
 
     # ------------------------------------------------------------ Hausruf (Gegensprechen ohne Klingel)
-    async def hausruf(self, von: str, ziele: list[str] | None = None) -> tuple[str | None, str]:
-        """von ruft ziele (Geräte, "gruppe:<Name>", "alle"). von nimmt sofort an (leitet), die anderen klingeln."""
+    async def hausruf(self, von: str, ziele: list[str] | None = None, art: str = "normal") -> tuple[str | None, str]:
+        """von ruft ziele (Geräte, "gruppe:<Name>", "alle"). von nimmt sofort an (leitet), die anderen klingeln.
+        art: "normal" (wie am Gerät eingestellt), "laut" (Lautstärke erzwingen), "durchstellen" (Ziele nehmen
+        automatisch an - nur Geräte mit Freigabe "auto", Mikro dort erst stumm; andere klingeln laut)."""
+        art = art if art in ("normal", "laut", "durchstellen") else "normal"
         if not re.fullmatch(r"mobile_app_[a-z0-9_]+", von or ""):
             return None, "Gerät unbekannt"
         alle_an = [g for g in self.ziele(ziele or ["alle"]) if g != von]
@@ -354,10 +391,13 @@ class Tuerklingel:
         self.anrufe = {i: y for i, y in self.anrufe.items() if jetzt - y["start"] < 3600}
         self.anrufe[aid] = {"kid": "", "art": "haus", "starter": von, "start": jetzt, "geraete": [von, *an],
                             "angenommen": 0.0, "von": "", "schluessel": {}, "teil": {}, "frei": True, "sprecher": "",
-                            "eingeladen": list(an), "ende": 0.0, "modus": "haus", "gesperrt": [], "sprecher_set": []}
+                            "eingeladen": list(an), "ende": 0.0, "modus": "haus", "gesperrt": [], "sprecher_set": [],
+                            "laut_modus": "normal" if art == "normal" else "laut"}
         await self._senden(von, "KLINGELN", self._payload(aid, von, sofort=True, hinweis="Hausruf läuft …"))
         for g in an:
-            await self._senden(g, "KLINGELN", self._payload(aid, g, hinweis=f"{self.name(von)} ruft"))
+            zwingen = art == "durchstellen" and bool(self.geraet_einst(g).get("auto"))
+            await self._senden(g, "KLINGELN", self._payload(aid, g, hinweis=f"{self.name(von)} ruft",
+                                                            **({"sofort": True, "gezwungen": True} if zwingen else {})))
         _LOGGER.info("Hausruf %s: %s ruft %s", aid, von, ", ".join(an))
         self.hass.bus.async_fire(EREIGNIS, {"aktion": "hausruf", "geraet": von, "anruf": aid, "klingel": "",
                                             "name": "Hausruf", "an": an})
@@ -455,12 +495,14 @@ class Tuerklingel:
              "grund": (x.get("grund") or {}).get(g, ""),
              "modus": x.get("modus", "einer"), "gesperrt": g in x.get("gesperrt", []),
              "mik_bereit": x.get("rk", True),
+             "darf_leiten": g == x["von"] or (bool(x.get("gaeste_leiten")) and g in x["teil"]),
+             "gaeste_leiten": bool(x.get("gaeste_leiten")),
              "klingelt": self._klingelt(x), "weg": [self.name(y) for y in x.get("weg", []) if y not in x["teil"]],
              "nochmal": [y for y in x["geraete"] if y not in x["teil"] and y != g],
              "sprecher_liste": [self.name(y) for y in x.get("sprecher_set", []) if y in x["teil"]]}
         for t in r["teilnehmer"]:
             t["gesperrt"] = t["g"] in x.get("gesperrt", [])
-        if g == x["von"]:
+        if r["darf_leiten"]:
             weg = set(teil)
             r["einladbar"] = [{"id": f"gruppe:{gr['name']}", "name": f"Gruppe {gr['name']}"} for gr in self.gruppen()
                               if set(gr["geraete"]) - weg] + [{"id": y, "name": self.name(y)} for y in self.app_geraete() if y not in weg]
@@ -561,7 +603,7 @@ class Tuerklingel:
                 return web.json_response({"ok": True, "ziele": [{"id": "alle", "name": "Alle"}] + [
                     {"id": f"gruppe:{gr['name']}", "name": f"Gruppe {gr['name']}"} for gr in self.gruppen()] + [
                     {"id": g, "name": self.name(g)} for g in self.app_geraete() if g != geraet]})
-            aid, text = await self.hausruf(geraet, [str(z) for z in (j.get("ziele") or ["alle"])][:16])
+            aid, text = await self.hausruf(geraet, [str(z) for z in (j.get("ziele") or ["alle"])][:16], str(j.get("art") or "normal"))
             return antwort(bool(aid), text)
         if aktion == "probeanruf":   # Probeanruf-Knopf der App (2026-11-21): echter Anruf nur an dieses Gerät
             return antwort(*await self._probeanruf(str(j.get("klingel") or aid.rsplit("_", 1)[0]), geraet))
@@ -632,7 +674,7 @@ class Tuerklingel:
                         self.mischer_stop(aid)
                         self.haus_stop(aid)
                         await self._alle_raus(x, aid, [g for g in x["geraete"] if g != geraet], "Gespräch beendet")
-        elif aktion in ("status", "schalten", "sprechen", "freigabe", "einladen", "modus", "mik_sperren"):
+        elif aktion in ("status", "schalten", "sprechen", "freigabe", "einladen", "modus", "mik_sperren", "gaeste_leiten"):
             if not schluessel_ok:
                 return antwort(False, "nicht erlaubt")
             if geraet in x.get("raus", ()) and geraet not in x["teil"] and x.get("gemeldet_raus", {}).get(geraet, 0) < jetzt - 30:
@@ -660,8 +702,14 @@ class Tuerklingel:
                     x["sprecher"] = geraet
                 elif x["sprecher"] == geraet:
                     x["sprecher"] = ""
-            elif aktion in ("freigabe", "einladen", "modus", "mik_sperren"):
+            elif aktion == "gaeste_leiten":
                 if geraet != x["von"]:
+                    ok, text = False, "Nur wer das Gespräch leitet"
+                else:
+                    x["gaeste_leiten"] = bool(j.get("an"))
+                    text = "Gäste dürfen mitleiten" if x["gaeste_leiten"] else "Nur du leitest"
+            elif aktion in ("freigabe", "einladen", "modus", "mik_sperren"):
+                if geraet != x["von"] and not (x.get("gaeste_leiten") and geraet in x["teil"]):
                     ok, text = False, "Nur wer das Gespräch leitet"
                 elif aktion == "einladen":
                     ok, text = await self._einladen(x, aid, [str(z) for z in (j.get("ziele") or [])][:16])

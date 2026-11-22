@@ -8,6 +8,8 @@ const LISTEN = {
   schalter: ["Schalter mit Status im Anruf, antippen schaltet um (z. B. „Nach Klingeln immer öffnen“)", 4, ["input_boolean", "switch", "light", "fan"], 20],
   anzeigen: ["Anzeigen im Anruf (z. B. Schloss, Türkontakt)", 3, null, 20],
 };
+const MENUE_NAMEN = { antwort: "Schnellantworten", tuer: "Tür öffnen", leitung: "Gespräch (Leitung: dazuholen, mitschauen, sprechen)", schalter: "Schalter", knoepfe: "Eigene Knöpfe" };
+const MENUE_STD = [{ id: "tuer", an: true }, { id: "leitung", an: true }, { id: "schalter", an: true }, { id: "antwort", an: true }, { id: "knoepfe", an: true }];
 const LEER = () => ({ geraete: [], gruppen: [], go2rtc: "", src: "", dauer: 30, oeffnen: "", oeffnen_frei: false, mitschauen: true,
   gaeste_bedienen: true, sprechen: "einer", laut: 70, antwort: "", antwort_oeffnen_s: 8, aktionen: [], schalter: [], anzeigen: [] });
 
@@ -85,6 +87,15 @@ class DoorCallPanel extends HTMLElement {
           ✓ = App verbunden.</div>
         <div class="zeile">${geraete.map((g) => `<label><input type="checkbox" data-fg="geraet" data-g="${esc(g)}" ${fg.modus === "alle" || (fg.geraete || []).includes(g) ? "checked" : ""} ${fg.modus === "alle" ? "disabled" : ""}>${esc(this._gname(g))}${(this.info.verbunden || []).includes(g) ? " ✓" : ""}</label>`).join("")}</div>
         <div class="zeile"><button class="ghost" data-a="suchen" ${fg.modus === "aus" ? "disabled" : ""}><ha-icon icon="mdi:magnify"></ha-icon>Jetzt Geräte suchen</button></div>
+        <hr><div class="note">Einstellungen je Gerät</div>
+        <div class="note erkl"><b>Lautstärke beim Klingeln:</b> „wie Klingel“ nimmt die Mindestlautstärke der Klingel, „wie am Gerät“ klingelt normal (lautlos bleibt lautlos), ein Wert erzwingt diese Lautstärke (z. B. für Tablets).
+          <b>Klingelfenster sofort:</b> beim Klingeln geht gleich das Fenster mit Live-Bild auf statt nur die Meldung (für Tablets; braucht „Über anderen Apps anzeigen“).
+          <b>Darf durchgestellt werden:</b> beim Hausruf „Direkt durchstellen“ nimmt dieses Gerät automatisch an (Mikro dort zuerst stumm).</div>
+        ${(fg.modus === "alle" ? geraete : (fg.geraete || [])).map((g) => { const e = (this.info.geraete_einst || {})[g] || {}; return `<div class="zeile"><span style="min-width:150px">${esc(this._gname(g))}</span>
+          <label>Lautstärke <select data-ge="laut" data-g="${esc(g)}"><option value="" ${e.laut == null ? "selected" : ""}>wie Klingel</option><option value="0" ${e.laut === 0 ? "selected" : ""}>wie am Gerät</option>
+            ${[30, 40, 50, 60, 70, 80, 90, 100].map((v) => `<option value="${v}" ${e.laut === v ? "selected" : ""}>${v} %</option>`).join("")}</select></label>
+          <label><input type="checkbox" data-ge="fenster" data-g="${esc(g)}" ${e.fenster ? "checked" : ""}>Klingelfenster sofort</label>
+          <label><input type="checkbox" data-ge="auto" data-g="${esc(g)}" ${e.auto ? "checked" : ""}>Darf durchgestellt werden</label></div>`; }).join("")}
         <hr><div class="note">Ruhe-Zonen</div>
         <div class="note erkl">Ist ein Gerät in einer seiner Ruhe-Zonen (z. B. auf der Arbeit), klingelt DoorCall dort nicht – weder Haustür noch Hausruf, Dazuholen oder Mitschauen. Entscheidet Home Assistant über den Standort der Home-Assistant-App (device_tracker), unabhängig vom „Nicht stören“ des Handys. Ein Probeanruf an genau dieses Gerät klingelt trotzdem. Tipp: Zonen unter ~150 m Radius erkennt das Handy oft nicht zuverlässig.</div>
         ${(fg.modus === "alle" ? geraete : (fg.geraete || [])).map((g) => `<div class="zeile"><span style="min-width:150px">${esc(this._gname(g))}</span>
@@ -151,7 +162,15 @@ class DoorCallPanel extends HTMLElement {
         <label title="Auswahl, die beim Wählen eine Ansage abspielt (z. B. Reolink „Schnellantwort-Nachricht abspielen“)">Schnellantworten ${this._sel(`data-a2="antwort" data-ki="${ki}"`, a.antwort, ["select", "input_select"], "— keine —")}</label>
         ${a.antwort && a.oeffnen ? `<label title="Wenn in der App „danach Tür öffnen“ angehakt ist">Tür öffnen nach Ansage <input type="number" data-a2="antwort_oeffnen_s" data-ki="${ki}" min="0" max="60" value="${a.antwort_oeffnen_s ?? 8}" style="width:60px"> s</label>` : ""}
       </div>
+      ${a.antwort ? `<div class="zeile"><label title="Ist in der App schon ausgewählt">Vorausgewählte Schnellantwort <select data-a2="antwort_standard" data-ki="${ki}">
+        <option value="">— erste —</option>${(this._hass.states[a.antwort]?.attributes.options || []).filter((o) => !["off", "aus"].includes(o)).map((o) => `<option value="${esc(o)}" ${o === a.antwort_standard ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label></div>` : ""}
       ${lst("aktionen")}${lst("schalter")}${lst("anzeigen")}
+      <hr><div class="note">Menü im Anruf (aufgezogenes Blatt): Reihenfolge und was sichtbar ist</div>
+      <div class="zeile" style="flex-direction:column;align-items:flex-start;gap:4px">${(a.menue && a.menue.length ? a.menue : MENUE_STD).map((m, mi, l) => `<span style="display:inline-flex;gap:6px;align-items:center">
+        <button class="ghost" data-a="m_hoch" data-ki="${ki}" data-mi="${mi}" ${mi === 0 ? "disabled" : ""} title="nach oben"><ha-icon icon="mdi:arrow-up"></ha-icon></button>
+        <button class="ghost" data-a="m_runter" data-ki="${ki}" data-mi="${mi}" ${mi === l.length - 1 ? "disabled" : ""} title="nach unten"><ha-icon icon="mdi:arrow-down"></ha-icon></button>
+        <label><input type="checkbox" data-menue="${ki}" data-mi="${mi}" ${m.an !== false ? "checked" : ""}>${esc(MENUE_NAMEN[m.id] || m.id)}</label></span>`).join("")}</div>
+      <div class="zeile"><label title="Die Leitung kann es im Gespräch jederzeit umschalten"><input type="checkbox" data-a2="gaeste_leiten" data-ki="${ki}" ${a.gaeste_leiten ? "checked" : ""}>Gäste dürfen mitleiten (dazuholen, Mitschauen sperren, Sprechen umstellen, Mikros sperren)</label></div>
       <div class="zeile"><button data-a="test" data-ki="${ki}" ${((a.geraete || []).length || (a.gruppen || []).length) && a.src ? "" : "disabled"}><ha-icon icon="mdi:phone-ring-outline"></ha-icon>Probeanruf</button>
         <span class="note">klingelt auf allen eingestellten Geräten</span></div>
     </div>`;
@@ -173,6 +192,18 @@ class DoorCallPanel extends HTMLElement {
 
   async _aenderung(e) {
     const t = e.target, ki = Number(t.dataset.ki), k = this.d.klingeln[ki];
+    if (t.dataset.menue !== undefined) {   // Menü-Bereich sichtbar/unsichtbar
+      const kk = this.d.klingeln[Number(t.dataset.menue)], an = (kk.anruf ||= LEER());
+      an.menue = (an.menue && an.menue.length ? an.menue : MENUE_STD).map((m) => ({ ...m }));
+      an.menue[Number(t.dataset.mi)].an = t.checked; return this._speichern();
+    }
+    if (t.dataset.ge) {   // Einstellungen je Gerät (doorcall/geraet_einst)
+      const e = this.info.geraete_einst ||= {}, g = t.dataset.g, x = (e[g] ||= {});
+      if (t.dataset.ge === "laut") x.laut = t.value === "" ? null : Number(t.value); else x[t.dataset.ge] = t.checked;
+      try { this.info.geraete_einst = (await this._hass.callWS({ type: "doorcall/geraet_einst", einst: e })).geraete_einst; this.msg = ""; this.msgErr = false; }
+      catch (err) { this.msg = "Gerät: " + (err.message || err); this.msgErr = true; }
+      return this._zeigen();
+    }
     if (t.dataset.ruhe) {   // Ruhe-Zonen je Gerät (doorcall/ruhe)
       const r = this.info.ruhe ||= {}, g = t.dataset.ruhe;
       r[g] = (r[g] || []).filter((z) => z !== t.dataset.z); if (t.checked) r[g].push(t.dataset.z);
@@ -216,7 +247,7 @@ class DoorCallPanel extends HTMLElement {
     else if (f === "oeffnen_frei") {
       if (t.checked && !confirm("„Tür öffnen“ im Anruf freigeben? Wer den Anruf angenommen hat – oder bei wem es gerade klingelt –, kann dann die Tür öffnen (zweimal tippen).")) { t.checked = false; return; }
       a.oeffnen_frei = t.checked;
-    } else if (f === "mitschauen" || f === "gaeste_bedienen") a[f] = t.checked;
+    } else if (f === "mitschauen" || f === "gaeste_bedienen" || f === "gaeste_leiten") a[f] = t.checked;
     else if (f === "dauer") a.dauer = Math.max(10, Math.min(120, Number(t.value) || 30));
     else if (f === "laut") a.laut = Math.max(0, Math.min(100, Number(t.value) || 0));
     else if (f === "antwort_oeffnen_s") a.antwort_oeffnen_s = Math.max(0, Math.min(60, Number(t.value) || 0));
@@ -230,6 +261,11 @@ class DoorCallPanel extends HTMLElement {
     const a = b.dataset.a, ki = Number(b.dataset.ki), k = this.d.klingeln[ki];
     if (a === "add") { this.d.klingeln.push({ id: "", name: "Tür " + (this.d.klingeln.length + 1), ausloeser: "", kamera: "", anruf: LEER() }); return this._speichern(); }
     if (a === "del") { if (!confirm(`Klingel „${k.name}“ löschen?`)) return; this.d.klingeln.splice(ki, 1); return this._speichern(); }
+    if (a === "m_hoch" || a === "m_runter") {
+      const an = (k.anruf ||= LEER()), l = (an.menue && an.menue.length ? an.menue : MENUE_STD).map((m) => ({ ...m }));
+      const i = Number(b.dataset.mi), j = a === "m_hoch" ? i - 1 : i + 1;
+      [l[i], l[j]] = [l[j], l[i]]; an.menue = l; return this._speichern();
+    }
     if (a === "li_add") { (k.anruf ||= LEER())[b.dataset.li] ||= []; k.anruf[b.dataset.li].push({ name: "", entity: "" }); return this._zeigen(); }
     if (a === "li_del") { k.anruf[b.dataset.li].splice(Number(b.dataset.ai), 1); return this._speichern(); }
     if (a === "gr_add") { (this.info.gruppen ||= []).push({ name: "", geraete: [] }); return this._zeigen(); }
