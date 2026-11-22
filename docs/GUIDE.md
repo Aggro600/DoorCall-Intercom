@@ -111,7 +111,12 @@ ring ("Living room tablet calls you"). Everyone who answered can talk **at the s
 device hears all others.
 
 **Start**
-- In the app: **"📢 Hausruf …"**.
+- In the app: the **start screen** shows Hausruf first – one tile for "All", each group and each device. Tap a tile,
+  choose how it should ring, done. Below: **"Doors & cameras"** (🚪 doorbell, 📹 camera without a trigger) to call a
+  door directly. Settings, "Who was there" and Do Not Disturb are in **"More"** / behind ⚙.
+- A **camera without a trigger** (no bell button, e.g. a garden camera) can be set up as its own doorbell: leave the
+  trigger empty. It never rings by itself but can be called from the app and the Hausruf card ("📹 … call") and
+  switched to during a call.
 - **Dashboard card with selection inside Home Assistant** (recommended, works everywhere – also on work phones with a
   work profile):
   ```yaml

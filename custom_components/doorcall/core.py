@@ -530,7 +530,7 @@ class Tuerklingel:
 
     def tuer_ziele(self, g: str) -> list[dict]:
         """Klingeln, die dieses Gerät selbst anrufen darf (für die Auswahl)."""
-        return [{"id": f"klingel:{k['id']}", "name": f"🚪 {k.get('name', 'Tür')} anrufen"}
+        return [{"id": f"klingel:{k['id']}", "name": f"{'🚪' if k.get('ausloeser') else '📹'} {k.get('name', 'Tür')} anrufen"}   # ohne Klingelknopf = Kamera
                 for k in self.daten.get("klingeln") or [] if k.get("id") and self.eingetragen(k, g)]
 
     async def tuer_anrufen(self, kid: str, von: str) -> tuple[str | None, str]:

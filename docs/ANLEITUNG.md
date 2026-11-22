@@ -115,7 +115,13 @@ klingeln („Tablet Wohnzimmer ruft dich“). Alle, die angenommen haben, könne
 dass jedes Gerät alle anderen hört.
 
 **Starten**
-- In der App: **„📢 Hausruf …“**.
+- In der App: Die **Startseite** zeigt zuerst den Hausruf – je eine Kachel für „Alle“, jede Gruppe und jedes Gerät.
+  Kachel antippen, wählen wie es klingeln soll, fertig. Darunter **„Türen & Kameras“** (🚪 Klingel, 📹 Kamera ohne
+  Auslöser), um eine Tür direkt anzurufen. Einstellungen, „Wer war da“ und „Nicht stören“ liegen unter **„Mehr“** /
+  hinter ⚙.
+- Eine **Kamera ohne Klingelknopf** (z. B. im Garten) lässt sich als eigene Klingel einrichten: Auslöser leer lassen.
+  Sie klingelt nie von selbst, ist aber aus der App und der Hausruf-Karte anrufbar („📹 … anrufen“) und im Gespräch
+  umschaltbar.
 - **Dashboard-Karte mit Auswahl in Home Assistant** (empfohlen, geht überall – auch auf Diensthandys mit Arbeitsprofil):
   ```yaml
   type: custom:doorcall-hausruf-card
