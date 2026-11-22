@@ -133,6 +133,11 @@ dass jedes Gerät alle anderen hört.
   ```
 - **Automation/Skript**: Aktion `doorcall.hausruf` mit `von` (rufendes Gerät) und `an` (Liste, Standard „alle“).
 
+**Tür anrufen:** In derselben Auswahl (App, Karte) stehen oben die Klingeln, bei denen das Gerät eingetragen ist –
+z. B. „🚪 Haustür anrufen“. Das Gerät ist dann sofort im Gespräch mit der Tür (Video, Ton, Schalter, Tür öffnen wie beim
+Klingeln; Mikro startet stumm), ohne dass jemand geklingelt hat. Weitere Geräte holst du im Gespräch dazu. Fester Knopf:
+Karte mit `an: klingel:<id>`, Aktion `doorcall.hausruf` mit `an: klingel:<id>`.
+
 **Wie soll es klingeln?** Nach der Wahl des Ziels (App, Karte, Aktion mit `art:`):
 - **Normal** – wie am Gerät eingestellt,
 - **Laut** – Lautstärke erzwingen,

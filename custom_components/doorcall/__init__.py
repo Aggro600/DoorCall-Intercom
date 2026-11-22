@@ -32,7 +32,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.17"
+VERSION_JS = "2026.11.22.18"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -331,7 +331,8 @@ async def ws_ziele(hass, connection, msg) -> None:
     ich = t.erkennen(ip, msg.get("ua") or "", connection.user.id if connection.user else "")
     connection.send_result(msg["id"], {"ich": ich,
         "geraete": [{"id": g, "name": t.name(g), "auto": bool(t.geraet_einst(g).get("auto"))} for g in t.app_geraete()],
-        "gruppen": [{"id": f"gruppe:{gr['name']}", "name": gr["name"]} for gr in t.gruppen()]})
+        "gruppen": [{"id": f"gruppe:{gr['name']}", "name": gr["name"]} for gr in t.gruppen()],
+        "tueren": {g: t.tuer_ziele(g) for g in t.app_geraete()}})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "doorcall/geraet_einst", vol.Required("einst"): {

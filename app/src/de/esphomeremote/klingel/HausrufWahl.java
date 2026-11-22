@@ -53,6 +53,7 @@ public class HausrufWahl extends Activity {
 
     /** Wie soll es klingeln? normal / laut / durchstellen - bei Gruppe/Alle danach: wer geht ran? einer / alle (2026-11-22). */
     static void artWaehlen(android.app.Activity a, String ziel, String zielId, java.util.function.BiConsumer<String, String> fertig, Runnable abbruch) {
+        if (zielId.startsWith("klingel:")) { fertig.accept("normal", "alle"); return; }   // Tür anrufen: keine Fragen
         String[] namen = {"🔔  Normal – wie am Gerät eingestellt", "🔊  Laut – Lautstärke erzwingen", "⚡  Direkt durchstellen – nimmt automatisch an"};
         String[] werte = {"normal", "laut", "durchstellen"};
         new AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)

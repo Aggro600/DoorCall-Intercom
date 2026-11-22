@@ -44,12 +44,12 @@ class DoorCallHausrufCard extends HTMLElement {
 
   _ziel(geraete, d) {
     const von = geraete.find((g) => g.id === ich());
-    const ziele = [{ id: "alle", name: "Alle" }, ...(d.gruppen || []).map((g) => ({ id: g.id, name: "Gruppe " + g.name })),
+    const ziele = [...((d.tueren || {})[ich()] || []), { id: "alle", name: "Alle" }, ...(d.gruppen || []).map((g) => ({ id: g.id, name: "Gruppe " + g.name })),
       ...geraete.filter((g) => g.id !== ich())];
     const wie = lesen(FEST) ? "festgelegt" : erkannt === ich() ? "erkannt" : "gemerkt";
     this._fenster("Hausruf an …", `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Von: <b>${esc(von ? von.name : ich())}</b> (${wie})
         · <a href="#" data-wer style="color:var(--primary-color)">anderes Gerät</a></p>`,
-      ziele.map((z) => ({ text: z.name, los: () => this._art(z, geraete) })),
+      ziele.map((z) => ({ text: z.name, los: () => z.id.startsWith("klingel:") ? this._rufen(z.id) : this._art(z, geraete) })),
       (box) => { box.querySelector("[data-wer]").onclick = (e) => { e.preventDefault(); this._wer(geraete, d); }; });
   }
 

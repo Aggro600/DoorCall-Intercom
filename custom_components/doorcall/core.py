@@ -214,7 +214,7 @@ class Tuerklingel:
         return next((k for k in self.daten.get("klingeln") or [] if k.get("id") == kid), None)
 
     # ------------------------------------------------------------ Anrufen
-    async def anrufen(self, kid: str, nur: list[str] | None = None, probe: bool = False) -> str | None:
+    async def anrufen(self, kid: str, nur: list[str] | None = None, probe: bool = False, sofort: bool = False) -> str | None:
         k = self.klingel(kid)
         a = (k or {}).get("anruf") or {}
         geraete = nur or self.ziele([*(a.get("geraete") or []), *(f"gruppe:{g}" for g in a.get("gruppen") or [])])
@@ -235,8 +235,8 @@ class Tuerklingel:
                             "gaeste_leiten": bool(a.get("gaeste_leiten")),
                             "eingeladen": [], "ende": 0.0, "modus": a.get("sprechen", "einer"), "gesperrt": [],
                             "sprecher_set": []}
-        for g in geraete:
-            await self._senden(g, "KLINGELN", self._payload(aid, g))
+        for g in geraete:   # sofort: Gerät ruft selbst die Tür an -> gleich im Gespräch, kein Klingeln
+            await self._senden(g, "KLINGELN", self._payload(aid, g, **({"sofort": True, "hinweis": "Du rufst die Tür an"} if sofort else {})))
         if self.anrufe[aid]["modus"] == "gemischt":   # Rückkanal schon beim Klingeln öffnen (go2rtc braucht 6-8 s)
             self.mischer(aid)._play()
         _LOGGER.info("Türklingel %s: Anruf %s an %s", k["name"], aid, ", ".join(geraete))
@@ -425,6 +425,8 @@ class Tuerklingel:
         automatisch an - nur Geräte mit Freigabe "auto", Mikro dort erst stumm; andere klingeln laut).
         runde: "alle" (alle klingeln weiter, jeder kann dazukommen) oder "einer" (wer zuerst annimmt, spricht -
         bei den anderen hört es auf, sie bekommen leise "Gespräch läuft – dazukommen"; 2026-11-22)."""
+        if ziele and str(ziele[0]).startswith("klingel:"):   # "Tür anrufen" aus derselben Auswahl
+            return await self.tuer_anrufen(str(ziele[0])[8:], von)
         art = art if art in ("normal", "laut", "durchstellen") else "normal"
         runde = "einer" if runde == "einer" and art != "durchstellen" else "alle"
         if not re.fullmatch(r"mobile_app_[a-z0-9_]+", von or ""):
@@ -450,6 +452,36 @@ class Tuerklingel:
         self.hass.bus.async_fire(EREIGNIS, {"aktion": "hausruf", "geraet": von, "anruf": aid, "klingel": "",
                                             "name": "Hausruf", "an": an})
         return aid, "Ruft " + ", ".join(self.name(g) for g in an)
+
+    def eingetragen(self, k: dict | None, g: str) -> bool:
+        """Ist das Gerät bei dieser Klingel eingetragen (direkt oder über eine Gruppe)?"""
+        a = (k or {}).get("anruf") or {}
+        return g in self.ziele([*(a.get("geraete") or []), *(f"gruppe:{n}" for n in a.get("gruppen") or [])])
+
+    def tuer_ziele(self, g: str) -> list[dict]:
+        """Klingeln, die dieses Gerät selbst anrufen darf (für die Auswahl)."""
+        return [{"id": f"klingel:{k['id']}", "name": f"🚪 {k.get('name', 'Tür')} anrufen"}
+                for k in self.daten.get("klingeln") or [] if k.get("id") and self.eingetragen(k, g)]
+
+    async def tuer_anrufen(self, kid: str, von: str) -> tuple[str | None, str]:
+        """Gerät ruft die Tür selbst an (2026-11-22): Video + Gegensprechen + Schalter wie beim Klingeln, ohne dass
+        jemand geklingelt hat. Nur dieses Gerät, es leitet; weitere kann es im Gespräch dazuholen."""
+        k = self.klingel(kid)
+        if not k:
+            return None, "Klingel unbekannt"
+        if not self.eingetragen(k, von):
+            return None, f"Gerät ist bei „{k.get('name', 'Tür')}“ nicht eingetragen"
+        jetzt = time.time()
+        for x in self.anrufe.values():
+            if x["kid"] == kid and not x["ende"] and not x["angenommen"] and jetzt - x["start"] < (k.get("anruf") or {}).get("dauer", 30):
+                return None, "Es klingelt gerade – bitte annehmen"
+        aid = await self.anrufen(kid, [von], probe=True, sofort=True)
+        if not aid:
+            return None, "Anruf nicht möglich"
+        _LOGGER.info("Türklingel %s: %s ruft die Tür an", k.get("name"), von)
+        self.hass.bus.async_fire(EREIGNIS, {"aktion": "tuer_anrufen", "geraet": von, "anruf": aid, "klingel": kid,
+                                            "name": k.get("name", "")})
+        return aid, f"Ruft {k.get('name', 'die Tür')} an"
 
     def haus_mischer(self, aid: str) -> "HausMischer":
         m = self._haus.get(aid)
@@ -652,7 +684,7 @@ class Tuerklingel:
             if geraet not in self.app_geraete():
                 return antwort(False, "Gerät unbekannt")
             if aktion == "hausruf_ziele":
-                return web.json_response({"ok": True, "ziele": [{"id": "alle", "name": "Alle"}] + [
+                return web.json_response({"ok": True, "ziele": self.tuer_ziele(geraet) + [{"id": "alle", "name": "Alle"}] + [
                     {"id": f"gruppe:{gr['name']}", "name": f"Gruppe {gr['name']}"} for gr in self.gruppen()] + [
                     {"id": g, "name": self.name(g)} for g in self.app_geraete() if g != geraet]})
             aid, text = await self.hausruf(geraet, [str(z) for z in (j.get("ziele") or ["alle"])][:16], str(j.get("art") or "normal"),
@@ -870,8 +902,7 @@ class Tuerklingel:
     async def _probeanruf(self, kid: str, geraet: str) -> tuple[bool, str]:
         """Nur an ein Gerät, das bei dieser Klingel eingetragen ist; höchstens alle 20 s (Schlüssel bekommt es per Weckruf)."""
         def eingetragen(kk):
-            a2 = (kk or {}).get("anruf") or {}
-            return geraet in self.ziele([*(a2.get("geraete") or []), *(f"gruppe:{g}" for g in a2.get("gruppen") or [])])
+            return self.eingetragen(kk, geraet)
         k = self.klingel(kid)
         if not k or not eingetragen(k):   # z. B. letzter Anruf war ein Hausruf (keine Klingel): erste passende Klingel
             k = next((kk for kk in self.daten.get("klingeln") or [] if eingetragen(kk)), None)

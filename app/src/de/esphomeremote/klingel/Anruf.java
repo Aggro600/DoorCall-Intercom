@@ -428,7 +428,7 @@ public final class Anruf {
         cfg = neu;
         angebotWeg(c, "");
         bild = null;
-        verlauf(c, "Hausruf");
+        verlauf(c, haus() ? "Hausruf" : "Tür angerufen");
         zustand = KLINGELT;
         beginn = System.currentTimeMillis();
         kontoAnmelden(c);

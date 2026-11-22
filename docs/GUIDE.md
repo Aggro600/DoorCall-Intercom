@@ -132,6 +132,11 @@ device hears all others.
   ```
 - **Automation/script**: action `doorcall.hausruf` with `von` (calling device) and `an` (list, default "alle").
 
+**Call the door:** the same selection (app, card) lists at the top the doorbells the device is assigned to – e.g.
+"🚪 Haustür anrufen". The device is in a call with the door right away (video, audio, switches, open door as when it
+rings; mic starts muted) without anyone ringing. Bring in other devices during the call. Fixed button: card with
+`an: klingel:<id>`, action `doorcall.hausruf` with `an: klingel:<id>`.
+
 **How should it ring?** After choosing the target (app, card, action with `art:`):
 - **Normal** – as set on the device,
 - **Loud** – force the volume,
