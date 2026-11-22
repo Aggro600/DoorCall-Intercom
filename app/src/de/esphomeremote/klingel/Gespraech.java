@@ -273,13 +273,16 @@ public class Gespraech extends Activity {
         kamZeile = new LinearLayout(this);   // Kamera wechseln: Bild und Ton getrennt (2026-11-22)
         kamZeile.setVisibility(View.GONE);
         kamKnopf = text(15, BLAU_HELL);
-        kamKnopf.setPadding(0, dp(8), dp(18), dp(2));
+        kamKnopf.setPadding(0, dp(8), dp(10), dp(2));
         kamKnopf.setOnClickListener(v -> kamWahl(false));
         tonKnopf = text(15, BLAU_HELL);
         tonKnopf.setPadding(0, dp(8), 0, dp(2));
         tonKnopf.setOnClickListener(v -> kamWahl(true));
-        kamZeile.addView(kamKnopf);
-        kamZeile.addView(tonKnopf);
+        for (TextView t : new TextView[]{kamKnopf, tonKnopf}) {   // beide einzeilig, gleich breit (Nutzer 2026-11-22)
+            t.setSingleLine(true);
+            t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            kamZeile.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+        }
         oben.addView(kamZeile);
         View linie = new View(this);
         linie.setBackgroundColor(BLAU);
@@ -645,7 +648,7 @@ public class Gespraech extends Activity {
                 knopfMikro = knopf(R.drawable.ic_mic, "Mikrofon", KACHEL, 60, v -> stummSchalten());
                 leiste.addView(knopfMikro);
                 knopfLaut = knopf(R.drawable.ic_laut, "Lautsprecher", BLAU, 60, v -> lautSchalten());
-                leiste.addView(knopfLaut);
+                leiste.addView(knopfLaut);   // Tablets ohne Hörer: bleibt fest auf Lautsprecher (2026-11-22)
                 tuerOben.setVisibility(Anruf.cfg.optBoolean("oeffnen", false) ? View.VISIBLE : View.GONE);
                 tuerKlappe.setVisibility(tuerOben.getVisibility());
                 leiste.addView(knopf(R.drawable.ic_auflegen, "Auflegen", ROT, 60, v -> auflegenFragen()));
@@ -1048,7 +1051,22 @@ public class Gespraech extends Activity {
                 .show();
     }
 
+    /** Gibt es außer dem Lautsprecher noch einen Ausgang (Hörer, Kopfhörer, Bluetooth)? */
+    private boolean hoererDa() {
+        try {
+            android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+            for (android.media.AudioDeviceInfo d : am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)) {
+                int t = d.getType();
+                if (t == android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE || t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET
+                        || t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES || t == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                        || t == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET || t == android.media.AudioDeviceInfo.TYPE_USB_HEADSET) return true;
+            }
+            return false;
+        } catch (Exception e) { return true; }
+    }
+
     private void lautSchalten() {
+        if (laut && !hoererDa()) { hinweis("Dieses Gerät hat keinen Hörer – Ton kommt über den Lautsprecher"); return; }
         laut = !laut;
         if (Anruf.verbindung != null) Anruf.verbindung.lautsprecher(laut);
         zustandZeigen();
@@ -1429,7 +1447,7 @@ public class Gespraech extends Activity {
         String[] n = new String[k.length()];
         for (int i = 0; i < n.length; i++) {
             boolean an = i == 0 ? jetzt.isEmpty() : k.optJSONObject(i).optString("src").equals(jetzt);
-            n[i] = (an ? "●  " : "○  ") + k.optJSONObject(i).optString("name") + (i == 0 ? "  (Tür)" : "");
+            n[i] = (an ? "●  " : "○  ") + k.optJSONObject(i).optString("name");
         }
         android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setTitle(ton ? "Ton – hören und sprechen mit …" : "Bild von …")
@@ -1441,7 +1459,7 @@ public class Gespraech extends Activity {
         android.widget.CheckBox auch = new android.widget.CheckBox(this);
         auch.setText(ton ? "Bild auch umschalten" : "Ton auch umschalten");
         auch.setTextColor(Color.WHITE);
-        auch.setChecked(kamSrc.equals(tonSrc) && ton);   // Ton wählen, Bild war gleich: standardmäßig mitnehmen
+        auch.setChecked(true);   // standardmäßig Bild und Ton zusammen (Nutzer 2026-11-22), Häkchen raus = getrennt
         for (int i = 0; i < n.length; i++) {
             final int w = i;
             TextView t = text(18, Color.WHITE);
