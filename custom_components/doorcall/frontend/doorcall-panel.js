@@ -139,6 +139,11 @@ class DoorCallPanel extends HTMLElement {
         <label title="Name des Streams in go2rtc">Stream <input data-a2="src" data-ki="${ki}" value="${esc(a.src || "")}" placeholder="z. B. haustur" style="width:120px"></label>
         <label>Klingeln <input type="number" data-a2="dauer" data-ki="${ki}" min="10" max="120" value="${a.dauer || 30}" style="width:64px"> s</label>
       </div>
+      <div class="zeile"><span class="note" style="width:100%">Kameras im Gespräch umschaltbar (📷-Knopf; der Ton bleibt bei der Tür). Andere Klingeln mit demselben go2rtc sind automatisch dabei. Weitere Streams – bis 8:</span>
+        ${(a.kameras || []).map((x, ai) => `<span style="display:inline-flex;gap:6px;align-items:center"><input data-kam="name" data-ki="${ki}" data-ai="${ai}" value="${esc(x.name || "")}" maxlength="20" placeholder="Name" style="width:110px">
+          <input data-kam="src" data-ki="${ki}" data-ai="${ai}" value="${esc(x.src || "")}" placeholder="Stream (z. B. garten)" style="width:130px">
+          <button class="rot" data-a="kam_del" data-ki="${ki}" data-ai="${ai}" title="Entfernen"><ha-icon icon="mdi:close"></ha-icon></button></span>`).join("")}
+        ${(a.kameras || []).length < 8 ? `<button class="ghost" data-a="kam_add" data-ki="${ki}"><ha-icon icon="mdi:plus"></ha-icon>Kamera</button>` : ""}</div>
       <div class="zeile"><label title="0 = aus">Mindestlautstärke beim Klingeln <input type="number" data-a2="laut" data-ki="${ki}" min="0" max="100" step="10" value="${a.laut ?? 70}" style="width:64px"> %</label></div>
       <div class="note erkl">Ist ein Handy lautlos, auf Vibration oder leiser als dieser Wert, klingelt die App trotzdem – über den Wecker-Kanal (wie ein Wecker, auch bei „lautlos“) mit dieser Lautstärke. Nach dem Klingeln wird die Lautstärke zurückgestellt. 0 = aus (dann gilt die Lautstärke des Handys). „Nicht stören“ in der App Türklingel bleibt still.</div>
       <hr><div class="note">Gesprächsrunde</div>
@@ -249,6 +254,13 @@ class DoorCallPanel extends HTMLElement {
     }
     if (!k) return;
     const a = (k.anruf ||= LEER());
+    if (t.dataset.kam) {
+      const x = (a.kameras ||= [])[Number(t.dataset.ai)]; if (!x) return;
+      x[t.dataset.kam] = t.value.trim().slice(0, t.dataset.kam === "name" ? 20 : 64);
+      if (t.dataset.kam === "src" && !x.name) x.name = x.src.slice(0, 20);
+      if (!x.src) return this._zeigen();
+      return this._speichern();
+    }
     if (t.dataset.li) {
       const x = (a[t.dataset.li] ||= [])[Number(t.dataset.ai)]; if (!x) return;
       const nmax = LISTEN[t.dataset.li][3];
@@ -287,6 +299,8 @@ class DoorCallPanel extends HTMLElement {
       [l[i], l[j]] = [l[j], l[i]]; an.menue = l; return this._speichern();
     }
     if (a === "li_add") { (k.anruf ||= LEER())[b.dataset.li] ||= []; k.anruf[b.dataset.li].push({ name: "", entity: "" }); return this._zeigen(); }
+    if (a === "kam_add") { ((k.anruf ||= LEER()).kameras ||= []).push({ name: "", src: "" }); return this._zeigen(); }
+    if (a === "kam_del") { k.anruf.kameras.splice(Number(b.dataset.ai), 1); return this._speichern(); }
     if (a === "li_del") { k.anruf[b.dataset.li].splice(Number(b.dataset.ai), 1); return this._speichern(); }
     if (a === "gr_add") { (this.info.gruppen ||= []).push({ name: "", geraete: [] }); return this._zeigen(); }
     if (a === "gr_del") {

@@ -121,7 +121,15 @@ def validate_anruf(a) -> dict:
     if an and (not re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", an) or an.split(".")[0] not in ("select", "input_select")):
         raise vol.Invalid(f"Anruf: '{an}' ist keine Auswahl (select)")
     gruppen = [str(g).strip()[:24] for g in (a.get("gruppen") or []) if str(g).strip()][:6]
-    return {"gruppen": gruppen, "mitschauen": a.get("mitschauen", True) is not False,
+    kameras = []   # 2026-11-22: weitere go2rtc-Streams, im Gespräch umschaltbar (Ton bleibt bei der Tür)
+    for x in (a.get("kameras") or [])[:8]:
+        ks, kn = str((x or {}).get("src") or "").strip(), str((x or {}).get("name") or "").strip()[:20]
+        if not ks:
+            continue
+        if not re.fullmatch(r"[A-Za-z0-9_.\-]{1,64}", ks):
+            raise vol.Invalid(f"Anruf: Kamera-Stream '{ks}' ungültig")
+        kameras.append({"name": kn or ks, "src": ks})
+    return {"kameras": kameras, "gruppen": gruppen, "mitschauen": a.get("mitschauen", True) is not False,
             "sprechen": "gemischt" if a.get("sprechen") == "gemischt" else "einer",
             # Mindestlautstärke beim Klingeln in % (2026-11-21): auch wenn das Handy lautlos ist (App klingelt dann über den
             # Wecker-Kanal); 0 = aus
@@ -210,6 +218,23 @@ class Tuerklingel:
         """Öffentliche HA-Adresse (Einstellungen › Netzwerk) für unterwegs, leer wenn keine eingetragen."""
         return str(self.hass.config.external_url or "").rstrip("/")
 
+    def kameras(self, k: dict | None) -> list[dict]:
+        """Im Gespräch umschaltbare Kameras: zuerst die der Tür, dann eingetragene weitere Streams, dann die anderen
+        Klingeln mit demselben go2rtc (automatisch). Alle über dasselbe go2rtc."""
+        a = (k or {}).get("anruf") or {}
+        if not a.get("go2rtc") or not a.get("src"):
+            return []
+        out = [{"name": k.get("name", "Tür"), "src": a["src"]}, *(a.get("kameras") or [])]
+        for kk in self.daten.get("klingeln") or []:
+            a2 = kk.get("anruf") or {}
+            if kk is not k and a2.get("src") and a2.get("go2rtc") == a["go2rtc"]:
+                out.append({"name": kk.get("name", a2["src"]), "src": a2["src"]})
+        gesehen, rein = set(), []
+        for c in out:
+            if c["src"] not in gesehen:
+                gesehen.add(c["src"]); rein.append({"name": c["name"], "src": c["src"]})
+        return rein
+
     def klingel(self, kid: str) -> dict | None:
         return next((k for k in self.daten.get("klingeln") or [] if k.get("id") == kid), None)
 
@@ -257,7 +282,7 @@ class Tuerklingel:
              "antworten": self._antworten(a), "antwort_oeffnen_s": a.get("antwort_oeffnen_s", 8),
              "modus": x.get("modus", "einer"), "api": API, "laut": self.laut_fuer(g, a.get("laut", 70)),
              "fenster": bool(self.geraet_einst(g).get("fenster")), "antwort_standard": a.get("antwort_standard", ""),
-             "menue": a.get("menue") or _menue(None), **extra}
+             "menue": a.get("menue") or _menue(None), "kameras": self.kameras(k), **extra}
         if x.get("art") == "haus":   # Hausruf: keine Kamera, keine Tür - nur Gegensprechen zwischen den Geräten
             erste = ((self.daten.get("klingeln") or [{}])[0].get("anruf") or {})
             laut = 0 if x.get("laut_modus") == "normal" else self.laut_fuer(g, erste.get("laut", 70), x.get("laut_modus") == "laut")
@@ -1337,12 +1362,16 @@ class SignalView(HomeAssistantView):
                 or time.time() - x["start"] > SIGNAL_FRIST or not sdp.startswith("v=0") or len(sdp) > 20000:
             _LOGGER.warning("Türklingel: Signal abgelehnt (%s, %s)", aid, g)
             return web.json_response({"fehler": "nicht erlaubt"}, status=403)
-        a = (self.t.klingel(x["kid"]) or {}).get("anruf") or {}
+        k = self.t.klingel(x["kid"])
+        a = (k or {}).get("anruf") or {}
         if not a.get("go2rtc") or not a.get("src"):
             return web.json_response({"fehler": "keine Kamera"}, status=404)
+        src = str(j.get("src") or a["src"])   # Kamera umschalten (2026-11-22): nur Streams aus der Liste dieser Klingel
+        if src not in [c["src"] for c in self.t.kameras(k)]:
+            return web.json_response({"fehler": "Kamera nicht erlaubt"}, status=403)
         try:
             s = async_get_clientsession(self.t.hass)
-            async with s.post(f"{a['go2rtc']}/api/webrtc", params={"src": a["src"]}, json={"type": "offer", "sdp": sdp},
+            async with s.post(f"{a['go2rtc']}/api/webrtc", params={"src": src}, json={"type": "offer", "sdp": sdp},
                               timeout=ClientTimeout(total=10)) as r:
                 antwort = await r.json(content_type=None)
                 if r.status >= 400:

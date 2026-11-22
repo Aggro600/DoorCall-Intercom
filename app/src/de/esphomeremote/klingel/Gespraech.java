@@ -28,6 +28,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -49,7 +50,8 @@ public class Gespraech extends Activity {
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private WebView web;
-    private TextView titel, status;
+    private TextView titel, status, kamKnopf;
+    private String kamSrc = "";   // "" = Kamera der Tür; sonst anderer go2rtc-Stream (nur Bild, Ton bleibt bei der Tür)
     private LinearLayout leiste, extras, unten, oben, schalterZeile;
     private TextView anzeigeZeile, rundeZeile;
     private LinearLayout leitungZeile;
@@ -256,6 +258,11 @@ public class Gespraech extends Activity {
         rundeZeile.setPadding(0, dp(2), 0, 0);
         rundeZeile.setVisibility(View.GONE);
         oben.addView(rundeZeile);
+        kamKnopf = text(15, BLAU_HELL);   // Kamera wechseln (2026-11-22)
+        kamKnopf.setPadding(0, dp(8), 0, dp(2));
+        kamKnopf.setOnClickListener(v -> kamWahl());
+        kamKnopf.setVisibility(View.GONE);
+        oben.addView(kamKnopf);
         View linie = new View(this);
         linie.setBackgroundColor(BLAU);
         LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(-1, dp(3));
@@ -756,7 +763,7 @@ public class Gespraech extends Activity {
             wunschGesetzt = true;
             if (!wunsch.equals(r.optString("modus", "einer"))) modusSetzen(wunsch);
         }
-        boolean bereit = r.optBoolean("mik_bereit", true);
+        boolean bereit = r.optBoolean("mik_bereit", true) || System.currentTimeMillis() - aktivSeit > 20000;   // Tür ohne Rückkanal: nicht ewig "Startet"
         if (bereit != mikBereit) {
             mikBereit = bereit;
             if (bereit && !stumm && !Anruf.haus()) hinweis("Jetzt hört man dich an der Tür");
@@ -1373,6 +1380,42 @@ public class Gespraech extends Activity {
             web.loadDataWithBaseURL("https://klingel.local/", SEITE, "text/html", "UTF-8", null);
         } else if (!seiteBereit) wartet = startJs(mikro);
         else js(startJs(mikro));
+        kamZeigen();
+    }
+
+    private JSONArray kameras() {
+        JSONArray k = Anruf.cfg.optJSONArray("kameras");
+        return k == null || Anruf.haus() ? new JSONArray() : k;
+    }
+
+    private void kamZeigen() {
+        JSONArray k = kameras();
+        if (kamKnopf == null) return;
+        if (k.length() < 2) { kamKnopf.setVisibility(View.GONE); return; }
+        String n = k.optJSONObject(0).optString("name");
+        for (int i = 1; i < k.length(); i++) if (k.optJSONObject(i).optString("src").equals(kamSrc)) n = k.optJSONObject(i).optString("name");
+        kamKnopf.setText("📷  " + n + "   ▾ Kamera wechseln");
+        kamKnopf.setVisibility(View.VISIBLE);
+    }
+
+    private void kamWahl() {
+        JSONArray k = kameras();
+        if (k.length() < 2) return;
+        if (sparBild != null && sparBild.getVisibility() == View.VISIBLE) { hinweis("Erst „Live starten“"); return; }
+        String[] n = new String[k.length()];
+        for (int i = 0; i < n.length; i++) {
+            String s = k.optJSONObject(i).optString("src");
+            boolean jetzt = i == 0 ? kamSrc.isEmpty() : s.equals(kamSrc);
+            n[i] = (jetzt ? "●  " : "○  ") + k.optJSONObject(i).optString("name") + (i == 0 ? "  (Tür)" : "");
+        }
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Kamera")
+                .setItems(n, (d, w) -> {
+                    kamSrc = w == 0 ? "" : k.optJSONObject(w).optString("src");
+                    js("kam(" + (w > 0) + ")");
+                    kamZeigen();
+                })
+                .show();
     }
 
     private void js(String code) { h.post(() -> { if (web != null) web.evaluateJavascript(code, null); }); }
@@ -1380,13 +1423,19 @@ public class Gespraech extends Activity {
     final class Bruecke {
         /** JS hat ein Angebot (SDP): erst direkt an go2rtc im Heimnetz, sonst über Home Assistant von unterwegs. */
         @JavascriptInterface
-        public void angebot(String sdp) {
+        public void angebot(String sdp) { signal(sdp, Anruf.cfg.optString("src"), "antwort"); }
+
+        /** Zweite Verbindung nur fürs Bild einer anderen Kamera (Kamera wechseln, 2026-11-22). */
+        @JavascriptInterface
+        public void angebot2(String sdp) { if (!kamSrc.isEmpty()) signal(sdp, kamSrc, "antwort2"); }
+
+        private void signal(String sdp, String src, String fn) {
             new Thread(() -> {
                 long t0 = SystemClock.elapsedRealtime();
                 String sdpA = null, weg = "";
                 try {
                     String url = Anruf.cfg.optString("go2rtc").replaceAll("/+$", "") + "/api/webrtc?src="
-                            + java.net.URLEncoder.encode(Anruf.cfg.optString("src"), "UTF-8");
+                            + java.net.URLEncoder.encode(src, "UTF-8");
                     Netz.Antwort a = Netz.post(url, new JSONObject().put("type", "offer").put("sdp", sdp).toString(), 1500, 8000);
                     if (a.code < 400) { sdpA = new JSONObject(a.text).getString("sdp"); weg = "Heimnetz"; }
                 } catch (Exception e) { Log.i(Anruf.TAG, "go2rtc direkt nicht erreichbar: " + e); }
@@ -1394,15 +1443,15 @@ public class Gespraech extends Activity {
                 if (sdpA == null && !ext.isEmpty()) {
                     try {
                         JSONObject o = new JSONObject().put("id", Anruf.id()).put("geraet", Anruf.cfg.optString("geraet"))
-                                .put("schluessel", Anruf.cfg.optString("schluessel")).put("sdp", sdp);
+                                .put("schluessel", Anruf.cfg.optString("schluessel")).put("sdp", sdp).put("src", src);
                         Netz.Antwort a = Netz.post(ext + Anruf.pfad(Anruf.cfg, "signal"), o.toString(), 5000, 12000);
                         if (a.code >= 400) throw new Exception("HTTP " + a.code + " " + a.text);
                         sdpA = new JSONObject(a.text).getString("sdp"); weg = "unterwegs";
                     } catch (Exception e) { Log.w(Anruf.TAG, "Signal über HA: " + e); }
                 }
                 if (sdpA == null || sdpA.isEmpty()) { statusSetzen("! Keine Verbindung zur Kamera"); return; }
-                Log.i(Anruf.TAG, "go2rtc-Antwort (" + weg + ") nach " + (SystemClock.elapsedRealtime() - t0) + " ms");
-                js("antwort(" + JSONObject.quote(sdpA) + ")");
+                Log.i(Anruf.TAG, "go2rtc-Antwort " + src + " (" + weg + ") nach " + (SystemClock.elapsedRealtime() - t0) + " ms");
+                js(fn + "(" + JSONObject.quote(sdpA) + ")");
             }).start();
         }
 
@@ -1422,10 +1471,21 @@ public class Gespraech extends Activity {
 
     private static final String SEITE = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1'>"
             + "<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}"
-            + "video{width:100%;height:100%;object-fit:contain;background:#000}</style></head><body>"
-            + "<video id=v autoplay playsinline muted poster='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'></video><script>"
-            + "let pc=null,mik=null,ctx=null,proc=null,leise=true;const v=document.getElementById('v');"
-            + "function stop(){if(proc){proc.disconnect();proc=null}if(ctx){ctx.close();ctx=null}"
+            + "video{width:100%;height:100%;object-fit:contain;background:#000}#w{position:absolute;left:0;top:0;display:none}</style></head><body>"
+            + "<video id=v autoplay playsinline muted poster='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'></video>"
+            + "<video id=w autoplay playsinline muted></video><script>"
+            + "let pc=null,mik=null,ctx=null,proc=null,leise=true,pc2=null,kamAn=false;const v=document.getElementById('v'),w=document.getElementById('w');"
+            // Kamera wechseln: zweite Verbindung nur mit Bild, liegt über dem Türbild; Ton (und Mikro) bleiben bei der Tür
+            + "function kamZu(){if(pc2){pc2.close();pc2=null}w.style.display='none';w.srcObject=null}"
+            + "function kam(an){kamAn=an;kamZu();if(an)kam2()}"
+            + "async function kam2(){try{const p=pc2=new RTCPeerConnection({iceServers:[]});"
+            + " p.ontrack=e=>{if(p!==pc2)return;w.srcObject=new MediaStream([e.track]);w.style.display='block';w.play().catch(()=>{})};"
+            + " p.addTransceiver('video',{direction:'recvonly'});await p.setLocalDescription(await p.createOffer());"
+            + " await new Promise(r=>{if(p.iceGatheringState==='complete')return r();"
+            + "  p.onicegatheringstatechange=()=>{if(p.iceGatheringState==='complete')r()};setTimeout(r,1500)});"
+            + " if(p===pc2)A.angebot2(p.localDescription.sdp)}catch(e){A.meldung('! Kamera: '+e)}}"
+            + "async function antwort2(sdp){try{if(pc2)await pc2.setRemoteDescription({type:'answer',sdp})}catch(e){A.meldung('Kamera: '+e)}}"
+            + "function stop(){kamZu();if(proc){proc.disconnect();proc=null}if(ctx){ctx.close();ctx=null}"
             + " if(pc){pc.close();pc=null}if(mik){mik.getTracks().forEach(t=>t.stop());mik=null}}"
             // Modus gemischt: Mikro nicht per WebRTC, sondern als 8-kHz-PCM über die App an Home Assistant (Mischer)
             + "function mischStart(){try{ctx=new AudioContext();const q=ctx.createMediaStreamSource(mik);const r=ctx.sampleRate/8000;"
@@ -1451,7 +1511,7 @@ public class Gespraech extends Activity {
             + "  await new Promise(r=>{if(pc.iceGatheringState==='complete')return r();"
             + "   pc.onicegatheringstatechange=()=>{if(pc.iceGatheringState==='complete')r()};setTimeout(r,1500)});"
             + "  A.meldung('sicher='+window.isSecureContext+' mikro='+!!mik);"
-            + "  A.angebot(pc.localDescription.sdp)"
+            + "  A.angebot(pc.localDescription.sdp);if(kamAn)kam2()"
             + " }catch(e){A.meldung('! '+e)}}"
             + "async function antwort(sdp){try{await pc.setRemoteDescription({type:'answer',sdp})}catch(e){A.meldung('! '+e)}}"
             + "function stumm(s){leise=s;if(mik)mik.getAudioTracks().forEach(t=>t.enabled=!s)}"

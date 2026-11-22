@@ -57,6 +57,9 @@ One card per doorbell (**"Add doorbell"** for more):
 - **Trigger** and **camera** (caller picture and photo for missed calls).
 - **Devices** and **groups** that ring.
 - **go2rtc** address and **stream**, **ring duration**.
+- **Cameras in the call**: at the top of the call "📷 … ▾ Kamera wechseln" shows another camera; audio and mic stay
+  with the door. Other doorbells on the same go2rtc are included automatically, add further streams (e.g. garden) here.
+  A door without audio backchannel works too: video, sound from outside, switches – only nobody outside hears you.
 - **Minimum ring volume** (see section 9).
 - **Call round**: allow watching along, guests may operate, speaking mode (sections 6 and 7).
 - **Open door with** + **enable the button** – deliberately two steps; in the call you tap twice.
