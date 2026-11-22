@@ -276,6 +276,10 @@ public final class Anruf {
         Person p = new Person.Builder().setName(name()).setImportant(true).setIcon(rundesBild()).build();
         PendingIntent voll = PendingIntent.getActivity(c, 1, new Intent(c, Gespraech.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        // Antippen / "Ansehen" (2026-11-22): eigener PendingIntent - auf Pixel-Tablets startete der Tipp auf ein Anruf-Popup
+        // mit demselben Intent wie das Vollbild nichts; der Knopf "Ansehen" geht immer
+        PendingIntent ansehen = PendingIntent.getActivity(c, 5, new Intent(c, Gespraech.class).setAction("ansehen")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent ja = PendingIntent.getActivity(c, 2, new Intent(c, Gespraech.class).setAction(Gespraech.ANNEHMEN)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent nein = PendingIntent.getBroadcast(c, 3, new Intent(c, Knopf.class).setAction("ablehnen"),
@@ -289,7 +293,9 @@ public final class Anruf {
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setOngoing(true)
                 .setFullScreenIntent(voll, true)
-                .setContentIntent(voll)
+                .setContentIntent(ansehen)
+                .addAction(new Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(c, R.drawable.ic_klingel),
+                        haus() ? "Ansehen" : "Video ansehen", ansehen).build())
                 .setStyle(Notification.CallStyle.forIncomingCall(p, nein, ja))
                 .setOnlyAlertOnce(leise || nurBild)
                 .build();

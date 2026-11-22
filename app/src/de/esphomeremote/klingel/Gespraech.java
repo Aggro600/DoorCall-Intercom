@@ -1274,28 +1274,23 @@ public class Gespraech extends Activity {
                         + "&geraet=" + java.net.URLEncoder.encode(Anruf.cfg.optString("geraet"), "UTF-8")
                         + "&schluessel=" + java.net.URLEncoder.encode(Anruf.cfg.optString("schluessel"), "UTF-8");
             } catch (Exception e) { return; }
-            for (String basis : new String[]{Anruf.cfg.optString("ha"), Anruf.cfg.optString("extern")}) {
-                if (basis.isEmpty() || mikFaden != Thread.currentThread()) continue;
-                HttpURLConnection c = null;
-                try {
-                    c = (HttpURLConnection) new URL(basis + q).openConnection();
-                    c.setRequestMethod("POST");
-                    c.setDoOutput(true);
-                    c.setChunkedStreamingMode(1024);
-                    c.setConnectTimeout(3000);
-                    c.setRequestProperty("Content-Type", "application/octet-stream");
-                    OutputStream o = c.getOutputStream();
-                    Log.i(Anruf.TAG, "Mischer-Mikro verbunden (" + basis + ")");
-                    while (mikFaden == Thread.currentThread()) {
-                        byte[] b = mikQ.poll(400, java.util.concurrent.TimeUnit.MILLISECONDS);
-                        if (b != null) { o.write(b); o.flush(); }
-                    }
-                    o.close();
-                    c.getResponseCode();
-                    return;
-                } catch (Exception e) {
-                    Log.w(Anruf.TAG, "Mischer-Mikro " + basis + ": " + e);
-                } finally { if (c != null) c.disconnect(); }
+            final Thread ich = Thread.currentThread();
+            Hochladen.Quelle quelle = new Hochladen.Quelle() {
+                byte[] rest; int pos;
+                public int lesen(byte[] buf) throws Exception {
+                    if (rest == null) { rest = mikQ.poll(400, java.util.concurrent.TimeUnit.MILLISECONDS); pos = 0; if (rest == null) return 0; }
+                    int n = Math.min(buf.length, rest.length - pos);
+                    System.arraycopy(rest, pos, buf, 0, n);
+                    pos += n; if (pos >= rest.length) rest = null;
+                    return n;
+                }
+                public boolean weiter() { return mikFaden == ich; }
+            };
+            String ha = Anruf.cfg.optString("ha"), extern = Anruf.cfg.optString("extern");
+            for (String basis : new String[]{ha, extern}) {
+                if (basis.isEmpty() || mikFaden != ich) continue;
+                // extern: kurze Pakete (Proxys geben endlose Uploads nicht weiter), intern: Strom (2026-11-22)
+                if (Hochladen.senden(basis, basis.equals(extern) && !basis.equals(ha), q, quelle, 1024, 3200, "Mischer-Mikro")) return;
             }
             if (mikFaden == Thread.currentThread()) statusSetzen("! Mikrofon erreicht Home Assistant nicht");
         });

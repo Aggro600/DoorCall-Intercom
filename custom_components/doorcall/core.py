@@ -960,6 +960,7 @@ class Mischer:
         self.puffer: dict[str, list[bytes]] = {}
         self.bereit: dict[str, bool] = {}
         self.rest: dict[str, bytes] = {}
+        self.paket: set[str] = set()   # Geräte, die in ~200-ms-Paketen schicken (über Proxy/extern) -> mehr Vorlauf
         self.ausgaenge: list[web.StreamResponse] = []
         self.aus = False
         self._play_zeit = 0.0
@@ -973,8 +974,9 @@ class Mischer:
         q = self.puffer.setdefault(g, [])
         for i in range(0, n, MISCH_FRAME * 2):
             q.append(daten[i:i + MISCH_FRAME * 2])
-        if len(q) > 10:   # mehr als 200 ms Rückstand: Ältestes weg (Verzögerung begrenzen)
-            del q[:len(q) - 10]
+        grenze = 30 if g in self.paket else 10   # Pakete: bis 600 ms, sonst 200 ms Rückstand (Verzögerung begrenzen)
+        if len(q) > grenze:
+            del q[:len(q) - grenze]
         self._play()
 
     def _play(self) -> None:
@@ -1025,7 +1027,7 @@ class Mischer:
                         q.clear(); self.bereit[g] = False
                         continue
                     if not self.bereit.get(g):
-                        if len(q) < 3:
+                        if len(q) < (14 if g in self.paket else 3):
                             continue
                         self.bereit[g] = True
                     if not q:
@@ -1078,7 +1080,9 @@ class MikView(HomeAssistantView):
         if x.get("modus") != "gemischt" or g not in x.get("teil", {}):
             return web.Response(status=409, text="nicht gemischt")
         m = t.mischer(aid)
-        _LOGGER.info("Türklingel: Mikro von %s im Mischer", g)
+        if q.get("paket"):
+            m.paket.add(g)
+        _LOGGER.debug("Türklingel: Mikro von %s im Mischer", g)
         try:
             while not m.aus:
                 d = await request.content.read(1280)
@@ -1099,6 +1103,7 @@ class HausMischer:
         self.puffer: dict[str, list[bytes]] = {}
         self.bereit: dict[str, bool] = {}
         self.rest: dict[str, bytes] = {}
+        self.paket: set[str] = set()
         self.hoerer: dict[str, web.StreamResponse] = {}
         self.aus = False
         self.task = t.hass.async_create_background_task(self._takt(), f"doorcall_hausruf_{aid}")
@@ -1111,8 +1116,9 @@ class HausMischer:
         q = self.puffer.setdefault(g, [])
         for i in range(0, n, HAUS_FRAME * 2):
             q.append(daten[i:i + HAUS_FRAME * 2])
-        if len(q) > 10:
-            del q[:len(q) - 10]
+        grenze = 30 if g in self.paket else 10
+        if len(q) > grenze:
+            del q[:len(q) - grenze]
 
     async def _takt(self) -> None:
         import array
@@ -1138,7 +1144,7 @@ class HausMischer:
                         q.clear(); self.bereit[g] = False
                         continue
                     if not self.bereit.get(g):
-                        if len(q) < 3:
+                        if len(q) < (14 if g in self.paket else 3):
                             continue
                         self.bereit[g] = True
                     if not q:
@@ -1195,7 +1201,9 @@ class HausMikView(HomeAssistantView):
         if x is None or g not in x.get("teil", {}):
             return web.Response(status=403)
         m = t.haus_mischer(aid)
-        _LOGGER.info("Hausruf %s: Mikro von %s verbunden", aid, g)
+        if request.query.get("paket"):
+            m.paket.add(g)
+        _LOGGER.debug("Hausruf %s: Mikro von %s verbunden", aid, g)
         try:
             while not m.aus:
                 d = await request.content.read(1280)

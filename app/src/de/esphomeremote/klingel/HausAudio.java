@@ -58,35 +58,27 @@ final class HausAudio {
         try {
             int min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
             rec = new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RATE, AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT, Math.max(min, FRAME * 4));
+                    AudioFormat.ENCODING_PCM_16BIT, Math.max(min, RATE * 2));   // 1 s Puffer: Mikro läuft weiter, während ein Paket unterwegs ist
             if (AcousticEchoCanceler.isAvailable()) { aec = AcousticEchoCanceler.create(rec.getAudioSessionId()); if (aec != null) aec.setEnabled(true); }
             if (NoiseSuppressor.isAvailable()) { ns = NoiseSuppressor.create(rec.getAudioSessionId()); if (ns != null) ns.setEnabled(true); }
             rec.startRecording();
-            byte[] buf = new byte[FRAME], leer = new byte[FRAME];
+            final AudioRecord r = rec;
+            final byte[] leer = new byte[FRAME];
+            Hochladen.Quelle quelle = new Hochladen.Quelle() {
+                public int lesen(byte[] buf) {
+                    int n = r.read(buf, 0, buf.length);
+                    if (n > 0 && stumm) System.arraycopy(leer, 0, buf, 0, n);   // stumm: Stille, damit die Verbindung offen bleibt
+                    return n;
+                }
+                public boolean weiter() { return laeuft; }
+            };
             while (laeuft) {
-                for (String basis : new String[]{cfg.optString("ha"), cfg.optString("extern")}) {
+                String extern = cfg.optString("extern");
+                for (String basis : new String[]{cfg.optString("ha"), extern}) {
                     if (basis.isEmpty() || !laeuft) continue;
-                    HttpURLConnection c = null;
-                    try {
-                        c = (HttpURLConnection) new URL(basis + Anruf.pfad(cfg, "haus_mik") + query(cfg)).openConnection();
-                        c.setRequestMethod("POST");
-                        c.setDoOutput(true);
-                        c.setChunkedStreamingMode(FRAME);
-                        c.setConnectTimeout(3000);
-                        c.setRequestProperty("Content-Type", "application/octet-stream");
-                        OutputStream o = c.getOutputStream();
-                        Log.i(Anruf.TAG, "Hausruf-Mikro verbunden (" + basis + ")");
-                        while (laeuft) {
-                            int n = rec.read(buf, 0, FRAME);
-                            if (n <= 0) continue;
-                            o.write(stumm ? leer : buf, 0, n);   // stumm: Stille, damit die Verbindung offen bleibt
-                            o.flush();
-                        }
-                        o.close();
-                        c.getResponseCode();
-                    } catch (Exception e) {
-                        Log.w(Anruf.TAG, "Hausruf-Mikro " + basis + ": " + e);
-                    } finally { if (c != null) c.disconnect(); }
+                    // extern: kurze Pakete (Proxys geben endlose Uploads nicht weiter), intern: Strom
+                    if (Hochladen.senden(basis, basis.equals(extern) && !basis.equals(cfg.optString("ha")), Anruf.pfad(cfg, "haus_mik") + query(cfg),
+                            quelle, FRAME, RATE * 2 / 5, "Hausruf-Mikro")) break;
                 }
                 if (laeuft) try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
             }

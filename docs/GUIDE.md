@@ -171,3 +171,5 @@ Event **`doorcall_event`** with `aktion`, `geraet`, `anruf`, `klingel`, `name`:
 | Hausruf window does not open by itself | App → "allow showing the window right away (over other apps)" |
 | Dashboard button `doorcall://` does nothing / "no app available" | App ≥ 5.6 required; allow opening other apps in your kiosk browser; work phone with work profile: links cannot cross profiles → use the card `custom:doorcall-hausruf-card` instead |
 | Chrome cannot reach Home Assistant (Android 17) | Allow Chrome the **"Local network"** permission |
+| Popup cannot be tapped on a tablet | Use the **"Video ansehen"** button in the popup (some tablets do not open call popups when tapping the text) – or per device "open ring window right away" |
+| Away from home nobody hears you (Hausruf/mixed) | App ≥ 5.9: via the external address (reverse proxy such as Nginx Proxy Manager) the app sends the mic in short packets |

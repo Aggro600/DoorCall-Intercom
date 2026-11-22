@@ -172,3 +172,5 @@ Ereignis **`doorcall_event`** mit `aktion`, `geraet`, `anruf`, `klingel`, `name`
 | Hausruf-Fenster geht nicht von selbst auf | App → „Fenster sofort zeigen erlauben (über anderen Apps)“ |
 | Dashboard-Knopf `doorcall://` tut nichts / „keine App verfügbar“ | App ≥ 5.6 nötig; im Kiosk-Browser das Öffnen anderer Apps erlauben; Diensthandy mit Arbeitsprofil: Links können nicht zwischen Profilen wechseln → stattdessen die Karte `custom:doorcall-hausruf-card` nehmen |
 | Chrome erreicht Home Assistant nicht (Android 17) | Chrome die Berechtigung **„Lokales Netzwerk“** erlauben |
+| Popup lässt sich auf dem Tablet nicht antippen | Knopf **„Video ansehen“** im Popup nutzen (manche Tablets öffnen Anruf-Popups nicht per Tipp auf den Text) – oder je Gerät „Klingelfenster sofort öffnen“ |
+| Unterwegs hört man mich zu Hause nicht (Hausruf/gemischt) | App ≥ 5.9: über die externe Adresse (Reverse-Proxy wie Nginx Proxy Manager) schickt die App das Mikro in kurzen Paketen |
