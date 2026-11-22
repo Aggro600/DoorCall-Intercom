@@ -30,7 +30,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.12"
+VERSION_JS = "2026.11.22.13"
 
 
 def validate_klingeln(roh) -> list[dict]:

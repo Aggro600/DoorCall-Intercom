@@ -164,6 +164,11 @@ class DoorCallPanel extends HTMLElement {
       </div>
       ${a.antwort ? `<div class="zeile"><label title="Ist in der App schon ausgewählt">Vorausgewählte Schnellantwort <select data-a2="antwort_standard" data-ki="${ki}">
         <option value="">— erste —</option>${(this._hass.states[a.antwort]?.attributes.options || []).filter((o) => !["off", "aus"].includes(o)).map((o) => `<option value="${esc(o)}" ${o === a.antwort_standard ? "selected" : ""}>${esc(o)}</option>`).join("")}</select></label></div>` : ""}
+      ${a.antwort ? `<div class="note" style="margin-top:6px">Reihenfolge der Schnellantworten in der App (Pfeile), Haken = anzeigen:</div>
+      <div class="zeile" style="flex-direction:column;align-items:flex-start;gap:4px">${this._reihe(a).map((r, ri, l) => `<span style="display:inline-flex;gap:6px;align-items:center">
+        <button class="ghost" data-a="r_hoch" data-ki="${ki}" data-ri="${ri}" ${ri === 0 ? "disabled" : ""}><ha-icon icon="mdi:arrow-up"></ha-icon></button>
+        <button class="ghost" data-a="r_runter" data-ki="${ki}" data-ri="${ri}" ${ri === l.length - 1 ? "disabled" : ""}><ha-icon icon="mdi:arrow-down"></ha-icon></button>
+        <label><input type="checkbox" data-reihe="${ki}" data-ri="${ri}" ${r.an !== false ? "checked" : ""}>${esc(r.text)}</label></span>`).join("")}</div>` : ""}
       ${lst("aktionen")}${lst("schalter")}${lst("anzeigen")}
       <hr><div class="note">Menü im Anruf (aufgezogenes Blatt): Reihenfolge und was sichtbar ist</div>
       <div class="zeile" style="flex-direction:column;align-items:flex-start;gap:4px">${(a.menue && a.menue.length ? a.menue : MENUE_STD).map((m, mi, l) => `<span style="display:inline-flex;gap:6px;align-items:center">
@@ -174,6 +179,13 @@ class DoorCallPanel extends HTMLElement {
       <div class="zeile"><button data-a="test" data-ki="${ki}" ${((a.geraete || []).length || (a.gruppen || []).length) && a.src ? "" : "disabled"}><ha-icon icon="mdi:phone-ring-outline"></ha-icon>Probeanruf</button>
         <span class="note">klingelt auf allen eingestellten Geräten</span></div>
     </div>`;
+  }
+
+  /** Schnellantworten der Klingel in gespeicherter Reihenfolge, neue Optionen hinten (wie in HA). */
+  _reihe(a) {
+    const alle = (this._hass.states[a.antwort]?.attributes.options || []).filter((o) => !["off", "aus"].includes(o));
+    const r = (a.antworten_reihe || []).filter((x) => alle.includes(x.text)).map((x) => ({ text: x.text, an: x.an !== false }));
+    return [...r, ...alle.filter((o) => !r.some((x) => x.text === o)).map((o) => ({ text: o, an: true }))];
   }
 
   _melden(t, err) { this.msg = t; this.msgErr = !!err; this._zeigen(); }
@@ -192,6 +204,10 @@ class DoorCallPanel extends HTMLElement {
 
   async _aenderung(e) {
     const t = e.target, ki = Number(t.dataset.ki), k = this.d.klingeln[ki];
+    if (t.dataset.reihe !== undefined) {   // Schnellantwort ein-/ausblenden
+      const kk = this.d.klingeln[Number(t.dataset.reihe)], an = (kk.anruf ||= LEER());
+      an.antworten_reihe = this._reihe(an); an.antworten_reihe[Number(t.dataset.ri)].an = t.checked; return this._speichern();
+    }
     if (t.dataset.menue !== undefined) {   // Menü-Bereich sichtbar/unsichtbar
       const kk = this.d.klingeln[Number(t.dataset.menue)], an = (kk.anruf ||= LEER());
       an.menue = (an.menue && an.menue.length ? an.menue : MENUE_STD).map((m) => ({ ...m }));
@@ -261,6 +277,10 @@ class DoorCallPanel extends HTMLElement {
     const a = b.dataset.a, ki = Number(b.dataset.ki), k = this.d.klingeln[ki];
     if (a === "add") { this.d.klingeln.push({ id: "", name: "Tür " + (this.d.klingeln.length + 1), ausloeser: "", kamera: "", anruf: LEER() }); return this._speichern(); }
     if (a === "del") { if (!confirm(`Klingel „${k.name}“ löschen?`)) return; this.d.klingeln.splice(ki, 1); return this._speichern(); }
+    if (a === "r_hoch" || a === "r_runter") {
+      const an = (k.anruf ||= LEER()), l = this._reihe(an), i = Number(b.dataset.ri), j = a === "r_hoch" ? i - 1 : i + 1;
+      [l[i], l[j]] = [l[j], l[i]]; an.antworten_reihe = l; return this._speichern();
+    }
     if (a === "m_hoch" || a === "m_runter") {
       const an = (k.anruf ||= LEER()), l = (an.menue && an.menue.length ? an.menue : MENUE_STD).map((m) => ({ ...m }));
       const i = Number(b.dataset.mi), j = a === "m_hoch" ? i - 1 : i + 1;

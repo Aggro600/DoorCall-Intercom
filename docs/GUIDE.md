@@ -61,7 +61,7 @@ One card per doorbell (**"Add doorbell"** for more):
 - **Call round**: allow watching along, guests may operate, speaking mode (sections 6 and 7).
 - **Open door with** + **enable the button** – deliberately two steps; in the call you tap twice.
 - **Quick replies** (doorbell announcements, e.g. Reolink), optionally "open the door afterwards", with a
-  **pre-selected** reply.
+  **pre-selected** reply. The order of the replies in the app is freely sortable (arrows), single ones can be hidden.
 - **Menu in the call**: order and visibility of the sections in the pulled-up sheet (quick replies, open door, call,
   switches, own buttons) – sort with arrows, show/hide with ticks.
 - Own **buttons**, **switches with state** and **displays** (lock, door contact …).

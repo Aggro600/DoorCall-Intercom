@@ -131,6 +131,8 @@ def validate_anruf(a) -> dict:
             # 2026-11-22: vorausgewählte Schnellantwort, Reihenfolge/Sichtbarkeit der Bereiche im Blatt, Gäste dürfen mitleiten
             "antwort_standard": str(a.get("antwort_standard") or "").strip()[:120],
             "menue": _menue(a.get("menue")),
+            "antworten_reihe": [{"text": str((r or {}).get("text") or "")[:120], "an": (r or {}).get("an", True) is not False}
+                                for r in (a.get("antworten_reihe") or [])[:30] if (r or {}).get("text")],
             "gaeste_leiten": bool(a.get("gaeste_leiten")),
             "geraete": geraete, "go2rtc": go2rtc, "src": src, "dauer": max(10, min(120, int(a.get("dauer") or 30))),
             "oeffnen": oe, "oeffnen_frei": bool(a.get("oeffnen_frei")) and bool(oe), "aktionen": aktionen,
@@ -773,8 +775,17 @@ class Tuerklingel:
         return antwort(True, "")
 
     def _antworten(self, a: dict) -> list[str]:
+        """Schnellantworten in der Reihenfolge aus DoorCall (antworten_reihe), ausgeblendete weg, neue hinten (2026-11-22).
+        Die App schickt die Nummer in DIESER Liste - _antwort nutzt dieselbe Liste."""
         st = self.hass.states.get(a.get("antwort") or "")
-        return [o for o in (st.attributes.get("options") or []) if o not in ("off", "aus")][:20] if st else []
+        if not st:
+            return []
+        alle = [o for o in (st.attributes.get("options") or []) if o not in ("off", "aus")]
+        reihe = a.get("antworten_reihe") or []
+        out = [r["text"] for r in reihe if r.get("text") in alle and r.get("an", True)]
+        bekannt = {r.get("text") for r in reihe}
+        out += [o for o in alle if o not in bekannt]
+        return out[:20]
 
     async def _antwort(self, x: dict, k: dict | None, geraet: str, nr, oeffnen: bool) -> tuple[bool, str]:
         """Schnellantwort abspielen; auf Wunsch danach (antwort_oeffnen_s) die Tür öffnen - nur wenn freigegeben."""

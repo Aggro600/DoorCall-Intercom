@@ -62,7 +62,7 @@ Karte je Klingel (**„Klingel hinzufügen“** für weitere):
 - **Gesprächsrunde**: Mitschauen erlauben, Gäste dürfen bedienen, Sprech-Modus (Abschnitte 6 und 7).
 - **Tür öffnen mit** + **Knopf freigeben** – bewusst zweistufig; im Anruf muss man zweimal tippen.
 - **Schnellantworten** (Ansagen der Klingel, z. B. Reolink), optional „danach Tür öffnen“, mit einer
-  **vorausgewählten** Ansage.
+  **vorausgewählten** Ansage. Reihenfolge der Ansagen in der App frei sortierbar (Pfeile), einzelne ausblendbar.
 - **Menü im Anruf**: Reihenfolge und Sichtbarkeit der Bereiche im aufgezogenen Blatt (Schnellantworten, Tür öffnen,
   Gespräch, Schalter, eigene Knöpfe) – mit Pfeilen sortieren, mit Haken ein-/ausblenden.
 - Eigene **Knöpfe**, **Schalter mit Status** und **Anzeigen** (Schloss, Türkontakt …).
