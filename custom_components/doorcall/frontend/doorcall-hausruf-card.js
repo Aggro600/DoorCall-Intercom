@@ -1,11 +1,15 @@
 // DoorCall – Dashboard-Karte "Hausruf" (2026-11-21): Auswahlfenster direkt in Home Assistant.
 // type: custom:doorcall-hausruf-card   name: Hausruf   icon: mdi:account-voice   an: (optional) "alle" | Gerät | "gruppe:Name"
-// Home Assistant weiß nicht, auf welchem Gerät gedrückt wurde - die Karte merkt sich das je Gerät/Browser
-// (localStorage "doorcall_geraet"), beim ersten Druck wird einmal gefragt.
+// Welches Gerät das ist, erkennt DoorCall selbst (2026-11-22: Gerätemodell im User-Agent, IP der Verbindung, Benutzer mit
+// nur einem Gerät) - ein und dieselbe Karte geht so auf jedem Gerät. Nur wenn das nicht eindeutig ist, wird einmal gefragt
+// (localStorage "doorcall_geraet"); "anderes Gerät" legt es fest und hat dann Vorrang ("doorcall_geraet_fest").
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const SCHLUESSEL = "doorcall_geraet";
-const ich = () => { try { return localStorage.getItem(SCHLUESSEL) || ""; } catch (e) { return ""; } };
-const ichSetzen = (g) => { try { localStorage.setItem(SCHLUESSEL, g); } catch (e) { /* privat */ } };
+const SCHLUESSEL = "doorcall_geraet", FEST = "doorcall_geraet_fest";
+const lesen = (k) => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } };
+const schreiben = (k, g) => { try { localStorage.setItem(k, g); } catch (e) { /* privat */ } };
+let erkannt = "";
+const ich = () => lesen(FEST) || erkannt || lesen(SCHLUESSEL);
+const ichSetzen = (g) => { schreiben(FEST, g); schreiben(SCHLUESSEL, g); };
 
 class DoorCallHausrufCard extends HTMLElement {
   setConfig(c) { this._c = c || {}; this._zeigen(); }
@@ -24,7 +28,7 @@ class DoorCallHausrufCard extends HTMLElement {
 
   async _los() {
     let d;
-    try { d = await this._hass.callWS({ type: "doorcall/ziele" }); }
+    try { d = await this._hass.callWS({ type: "doorcall/ziele", ua: navigator.userAgent || "" }); erkannt = d.ich || ""; }
     catch (e) { this._fenster("Hausruf", `<p>DoorCall nicht erreichbar: ${esc(e.message || e)}</p>`, []); return; }
     const geraete = d.geraete || [];
     if (!ich() || !geraete.some((g) => g.id === ich())) return this._wer(geraete, d);
@@ -34,14 +38,16 @@ class DoorCallHausrufCard extends HTMLElement {
 
   _wer(geraete, d) {
     this._fenster("Welches Gerät ist das?", `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Einmal festlegen – der Hausruf startet dann immer von diesem Gerät. Wird hier im Browser gemerkt.</p>`,
-      geraete.map((g) => ({ text: g.name, los: () => { ichSetzen(g.id); this._c.an ? this._rufen(this._c.an) : this._ziel(geraete, d); } })));
+      [...(lesen(FEST) && erkannt ? [{ text: "↺  Automatisch erkennen", los: () => { try { localStorage.removeItem(FEST); } catch (e) {} this._c.an ? this._rufen(this._c.an) : this._ziel(geraete, d); } }] : []),
+      ...geraete.map((g) => ({ text: g.name, los: () => { ichSetzen(g.id); this._c.an ? this._rufen(this._c.an) : this._ziel(geraete, d); } }))]);
   }
 
   _ziel(geraete, d) {
     const von = geraete.find((g) => g.id === ich());
     const ziele = [{ id: "alle", name: "Alle" }, ...(d.gruppen || []).map((g) => ({ id: g.id, name: "Gruppe " + g.name })),
       ...geraete.filter((g) => g.id !== ich())];
-    this._fenster("Hausruf an …", `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Von: <b>${esc(von ? von.name : ich())}</b>
+    const wie = lesen(FEST) ? "festgelegt" : erkannt === ich() ? "erkannt" : "gemerkt";
+    this._fenster("Hausruf an …", `<p style="margin:0 0 8px;color:var(--secondary-text-color)">Von: <b>${esc(von ? von.name : ich())}</b> (${wie})
         · <a href="#" data-wer style="color:var(--primary-color)">anderes Gerät</a></p>`,
       ziele.map((z) => ({ text: z.name, los: () => this._art(z, geraete) })),
       (box) => { box.querySelector("[data-wer]").onclick = (e) => { e.preventDefault(); this._wer(geraete, d); }; });

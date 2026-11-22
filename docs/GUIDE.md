@@ -111,8 +111,13 @@ device hears all others.
   icon: mdi:account-voice
   # an: alle            # optional: fixed target, no selection
   ```
-  On first use the card asks once "Which device is this?" and remembers it in this browser/app (change via "other
-  device" in the window). After that: pick the target – done.
+  The card **detects by itself** which device it is pressed on – the same card works on every device:
+  1. device model in the Home Assistant app's browser (if only one device has that model),
+  2. IP address of the connection (the address the app "Türklingel" reports from, or the Fully Kiosk address of a
+     device with the same name) – tells e.g. two identical tablets apart,
+  3. the logged-in user has only one device.
+  Only if that is ambiguous it asks once "Which device is this?". The window shows "From: … (detected)"; "other device"
+  pins a device, "↺ Detect automatically" resets. After that: pick the target – done.
 - **Dashboard button via the app** – opens the selection of the app "Türklingel" on the device where it is pressed:
   ```yaml
   type: button

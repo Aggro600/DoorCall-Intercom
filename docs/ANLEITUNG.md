@@ -112,8 +112,13 @@ dass jedes Gerät alle anderen hört.
   icon: mdi:account-voice
   # an: alle            # optional: festes Ziel, dann ohne Auswahl
   ```
-  Beim ersten Druck fragt die Karte einmal „Welches Gerät ist das?“ und merkt es sich in diesem Browser/dieser App
-  (änderbar über „anderes Gerät“ im Fenster). Danach: Ziel wählen – fertig.
+  Die Karte **erkennt selbst**, auf welchem Gerät sie gedrückt wird – dieselbe Karte geht auf jedem Gerät:
+  1. Gerätemodell im Browser der Home-Assistant-App (wenn nur ein Gerät dieses Modell hat),
+  2. IP-Adresse der Verbindung (Adresse, von der sich die App „Türklingel“ meldet, oder die Fully-Kiosk-Adresse eines
+     Geräts mit gleichem Namen) – unterscheidet z. B. zwei gleiche Tablets,
+  3. der angemeldete Benutzer hat nur ein Gerät.
+  Nur wenn das nicht eindeutig ist, fragt sie einmal „Welches Gerät ist das?“. Im Fenster steht „Von: … (erkannt)“;
+  über „anderes Gerät“ lässt es sich fest einstellen, „↺ Automatisch erkennen“ stellt zurück. Danach: Ziel wählen – fertig.
 - **Dashboard-Knopf über die App** – öffnet die Auswahl der App „Türklingel“ auf dem Gerät, auf dem gedrückt wird:
   ```yaml
   type: button

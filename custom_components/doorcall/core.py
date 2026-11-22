@@ -168,6 +168,7 @@ class Tuerklingel:
         self.anrufe: dict[str, dict] = {}     # id -> {kid, start, geraete, angenommen, von}
         self._probe_zeit: dict[str, float] = {}   # Gerät -> letzter Probeanruf aus der App
         self._mischer: dict[str, Mischer] = {}
+        self._ips: dict[str, str] = {}   # Gerät -> letzte IP, von der die Türklingel-App sich gemeldet hat
         self._haus: dict[str, HausMischer] = {}
         self._rk: dict[str, tuple[float, bool]] = {}   # Rückkanal-Zustand je go2rtc-Stream (Zwischenspeicher)
         wh = daten.get("webhook")
@@ -278,6 +279,47 @@ class Tuerklingel:
             if n:
                 out[f"mobile_app_{slugify(n)}"] = n
         return out
+
+    def erkennen(self, ip: str = "", ua: str = "", user_id: str = "") -> str:
+        """Welches Gerät ruft das Dashboard auf? (2026-11-22, damit ein Hausruf-Knopf auf jedem Gerät ohne Einstellen geht)
+        1. Gerätemodell im User-Agent (HA-App/WebView nennt es, z. B. SM-A356B) - wenn nur ein Gerät dieses Modell hat,
+        2. IP der Verbindung = IP, von der sich die Türklingel-App gemeldet hat oder Fully-Kiosk-Adresse mit gleichem Namen,
+        3. der angemeldete Benutzer hat nur ein einziges Gerät."""
+        from homeassistant.util import slugify
+        kand = set(self.app_geraete())
+        if not kand:
+            return ""
+        eintraege = {f"mobile_app_{slugify(str(e.data.get('device_name') or e.title or ''))}": e
+                     for e in self.hass.config_entries.async_entries("mobile_app")}
+        eintraege = {g: e for g, e in eintraege.items() if g in kand}
+        ua_k = (ua or "").lower()
+        if ua_k:
+            treffer = [g for g, e in eintraege.items() if len(str(e.data.get("model") or "")) >= 4
+                       and str(e.data.get("model")).lower() in ua_k]
+            if len(treffer) == 1:
+                return treffer[0]
+            if treffer:
+                kand_ua = set(treffer)
+            else:
+                kand_ua = kand
+        else:
+            kand_ua = kand
+        if ip:
+            ips: dict[str, set] = {}
+            for g, i in self._ips.items():
+                ips.setdefault(i, set()).add(g)
+            for e in self.hass.config_entries.async_entries("fully_kiosk"):
+                g = f"mobile_app_{slugify(str(e.title or ''))}"
+                if (h := str(e.data.get("host") or "")) and g in kand:
+                    ips.setdefault(h, set()).add(g)
+            treffer = (ips.get(ip) or set()) & kand_ua
+            if len(treffer) == 1:
+                return next(iter(treffer))
+        if user_id:
+            eigene = [g for g, e in eintraege.items() if e.data.get("user_id") == user_id and g in kand_ua]
+            if len(eigene) == 1:
+                return eigene[0]
+        return ""
 
     def name(self, g: str) -> str:
         return self.namen().get(g) or g.removeprefix("mobile_app_").replace("_", " ").title()
@@ -585,6 +627,8 @@ class Tuerklingel:
             return None
         aktion, aid, geraet = str(j.get("tuerklingel") or ""), str(j.get("id") or ""), str(j.get("geraet") or "")
         antwort = lambda ok, text: web.json_response({"ok": ok, "text": text})  # noqa: E731
+        if re.fullmatch(r"mobile_app_[a-z0-9_]+", geraet) and request.remote:
+            self._ips[geraet] = str(request.remote)   # für erkennen(): Dashboard-Karte auf diesem Gerät
         if aktion == "hallo":   # App hat die stille Einrichtung bekommen (oder startet neu) -> Gerät mit App
             if not self.erlaubt(geraet):
                 _LOGGER.info("DoorCall: %s hat die App, ist aber nicht freigegeben", geraet)

@@ -10,6 +10,8 @@ Beim ersten Start übernimmt sie die Einstellungen aus ESPHomeRemote (gleiche We
 
 from __future__ import annotations
 
+import asyncio
+
 import json
 import logging
 import os
@@ -30,7 +32,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.22.13"
+VERSION_JS = "2026.11.22.14"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -311,12 +313,21 @@ async def ws_ruhe(hass, connection, msg) -> None:
     connection.send_result(msg["id"], {"ruhe": t.daten["ruhe"]})
 
 
-@websocket_api.websocket_command({vol.Required("type"): "doorcall/ziele"})
-@callback
-def ws_ziele(hass, connection, msg) -> None:
-    """Für die Dashboard-Karte (auch ohne Admin): Geräte mit App (Name) und Gruppen."""
+@websocket_api.websocket_command({vol.Required("type"): "doorcall/ziele", vol.Optional("ua"): str})
+@websocket_api.async_response
+async def ws_ziele(hass, connection, msg) -> None:
+    """Für die Dashboard-Karte (auch ohne Admin): Geräte mit App (Name), Gruppen und welches Gerät das hier ist."""
     t = _t(hass)
-    connection.send_result(msg["id"], {
+    ip = ""
+    try:   # IP dieser Verbindung = letzte Nutzung ihres Anmelde-Tokens
+        rt = hass.auth.async_get_refresh_token(connection.refresh_token_id)
+        if asyncio.iscoroutine(rt):
+            rt = await rt
+        ip = str(getattr(rt, "last_used_ip", "") or "")
+    except Exception:  # noqa: BLE001
+        pass
+    ich = t.erkennen(ip, msg.get("ua") or "", connection.user.id if connection.user else "")
+    connection.send_result(msg["id"], {"ich": ich,
         "geraete": [{"id": g, "name": t.name(g), "auto": bool(t.geraet_einst(g).get("auto"))} for g in t.app_geraete()],
         "gruppen": [{"id": f"gruppe:{gr['name']}", "name": gr["name"]} for gr in t.gruppen()]})
 
