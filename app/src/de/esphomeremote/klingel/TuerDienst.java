@@ -29,6 +29,28 @@ public class TuerDienst extends ConnectionService {
     }
 
     @Override
+    public Connection onCreateOutgoingConnection(PhoneAccountHandle konto, ConnectionRequest req) {
+        // eigener Anruf (Hausruf/Tür anrufen/Dazukommen): ausgehend, damit Android nicht "klingelt" meldet
+        App.ctx = getApplicationContext();
+        Verbindung v = new Verbindung();
+        v.setConnectionProperties(Connection.PROPERTY_SELF_MANAGED);
+        v.setConnectionCapabilities(Connection.CAPABILITY_MUTE | Connection.CAPABILITY_SUPPORT_HOLD);
+        v.setAudioModeIsVoip(true);
+        v.setAddress(req.getAddress(), TelecomManager.PRESENTATION_ALLOWED);
+        v.setCallerDisplayName(Anruf.name(), TelecomManager.PRESENTATION_ALLOWED);
+        Anruf.verbindung = v;
+        if (Anruf.zustand == Anruf.AKTIV) v.aktiv();
+        else v.setDialing();
+        return v;
+    }
+
+    @Override
+    public void onCreateOutgoingConnectionFailed(PhoneAccountHandle konto, ConnectionRequest req) {
+        Log.w(Anruf.TAG, "Telecom hat den ausgehenden Anruf abgelehnt – Gespräch läuft ohne Telecom");
+        Anruf.verbindung = null;
+    }
+
+    @Override
     public void onCreateIncomingConnectionFailed(PhoneAccountHandle konto, ConnectionRequest req) {
         Log.w(Anruf.TAG, "Telecom hat den Anruf abgelehnt - klingle nur per Benachrichtigung");
         Anruf.verbindung = null;

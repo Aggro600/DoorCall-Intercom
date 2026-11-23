@@ -426,6 +426,23 @@ public final class Anruf {
     }
 
     /** Hausruf, den dieses Gerät selbst gestartet hat: ohne Klingeln gleich im Gespräch (leitet). */
+    /** Eigener Anruf (Hausruf starten, Tür anrufen, Dazukommen) bei Android als AUSGEHEND melden.
+     *  Bis 7.4 lief auch das über addNewIncomingCall – Android zeigte das Handy dann kurz als "klingelt"
+     *  (Companion phone_state = ringing) und Automationen wie "Handy klingelt" sprangen an (Nutzer 2026-11-23). */
+    static void ausgehendMelden(Context c) {
+        try {
+            TelecomManager tm = c.getSystemService(TelecomManager.class);
+            if (tm == null) return;
+            if (Build.VERSION.SDK_INT >= 28 && !tm.isOutgoingCallPermitted(konto(c))) {
+                Log.w(TAG, "Telecom erlaubt gerade keinen ausgehenden Anruf");
+                return;
+            }
+            Bundle b = new Bundle();
+            b.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, konto(c));
+            tm.placeCall(Uri.fromParts("tuer", name(), null), b);
+        } catch (Exception e) { Log.w(TAG, "Telecom ausgehend: " + e); }
+    }
+
     static void sofortAnnehmen(Context c, JSONObject neu) {
         if (zustand != AUS) return;
         cfg = neu;
@@ -435,12 +452,7 @@ public final class Anruf {
         zustand = KLINGELT;
         beginn = System.currentTimeMillis();
         kontoAnmelden(c);
-        try {
-            TelecomManager tm = c.getSystemService(TelecomManager.class);
-            Bundle b = new Bundle();
-            b.putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, Uri.fromParts("tuer", name(), null));
-            if (tm != null && tm.isIncomingCallPermitted(konto(c))) tm.addNewIncomingCall(konto(c), b);
-        } catch (Exception e) { Log.w(TAG, "Telecom: " + e); }
+        ausgehendMelden(c);   // eigener Anruf: ausgehend, sonst meldet Android "klingelt"
         annehmen(c);
         try {   // Oberfläche: geht aus dem Hintergrund nur mit "Über anderen Apps anzeigen" - sonst über die Laufend-Meldung
             c.startActivity(new Intent(c, Gespraech.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -479,12 +491,7 @@ public final class Anruf {
         zustand = KLINGELT;
         beginn = System.currentTimeMillis();
         kontoAnmelden(c);
-        try {
-            TelecomManager tm = c.getSystemService(TelecomManager.class);
-            Bundle b = new Bundle();
-            b.putParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, Uri.fromParts("tuer", name(), null));
-            if (tm != null && tm.isIncomingCallPermitted(konto(c))) tm.addNewIncomingCall(konto(c), b);
-        } catch (Exception e) { Log.w(TAG, "Telecom: " + e); }
+        ausgehendMelden(c);   // Dazukommen ist auch ein eigener (ausgehender) Anruf
         return true;
     }
 
