@@ -197,8 +197,17 @@ class Tuerklingel:
         if not wh:
             wh = daten["webhook"] = f"doorcall_{secrets.token_hex(16)}"
             self.speichern()
+        bestehend = hass.data.get(webhook.DOMAIN, {}).get(wh)
+        if bestehend and bestehend.get("domain") != DOMAIN:
+            # die (übernommene) Webhook-ID gehört gerade einer anderen Integration (z. B. ESPHomeRemote) - nie
+            # deren Handler entfernen, sondern eine eigene ID nehmen; die Apps bekommen sie mit der Einrichtung
+            _LOGGER.warning("DoorCall: Webhook-ID wird von %s benutzt - neue eigene ID", bestehend.get("domain"))
+            wh = daten["webhook"] = f"doorcall_{secrets.token_hex(16)}"
+            daten["uebernommen"] = False
+            self.speichern()
+        elif bestehend:
+            webhook.async_unregister(hass, wh)   # eigener Handler nach Neuladen der Integration - nicht doppelt
         self.webhook_id = wh
-        webhook.async_unregister(hass, wh)   # nach Neuladen der Integration nicht doppelt
         webhook.async_register(hass, DOMAIN, "DoorCall Intercom (App)", wh, self._webhook, local_only=False,
                                allowed_methods=["POST"])
 
@@ -298,6 +307,18 @@ class Tuerklingel:
         _LOGGER.info("Türklingel %s: Anruf %s an %s", k["name"], aid, ", ".join(geraete))
         return aid
 
+    def geraet_schluessel(self, g: str) -> str:
+        """Schlüssel je Gerät für Rückmeldungen ohne laufenden Anruf (Hausruf starten, Probeanruf, hallo)."""
+        alle = self.daten.setdefault("geraete_schluessel", {})
+        if g not in alle:
+            alle[g] = secrets.token_urlsafe(18)
+            self.speichern()
+        return alle[g]
+
+    def geraet_schluessel_ok(self, g: str, wert: str) -> bool:
+        soll = (self.daten.get("geraete_schluessel") or {}).get(g)
+        return bool(soll and wert) and secrets.compare_digest(soll, wert)
+
     def _payload(self, aid: str, g: str, **extra) -> dict:
         """Alles, was die App für einen Anruf braucht (Klingeln, Dazuholen, Mitschau-Angebot)."""
         x = self.anrufe[aid]
@@ -308,6 +329,7 @@ class Tuerklingel:
         d = {"id": aid, "klingel": x["kid"], "name": k.get("name", "Tür"), "go2rtc": a.get("go2rtc", ""), "src": a.get("src", ""),
              "webhook": self.webhook_url(), "oeffnen": bool(a.get("oeffnen_frei") and a.get("oeffnen")),
              "dauer": a.get("dauer", 30), "geraet": g, "schluessel": x["schluessel"][g],
+             "geraet_schluessel": self.geraet_schluessel(g),
              "ha": f"http://{self.basis()}", "bild": bool(k.get("kamera")),
              "aktionen": [y["name"] for y in a.get("aktionen") or []], **self.status(k),
              "antworten": self._antworten(a), "antwort_oeffnen_s": a.get("antwort_oeffnen_s", 8),
@@ -479,7 +501,8 @@ class Tuerklingel:
         for g in ziele:
             k = next((x for x in kl if g in ((x.get("anruf") or {}).get("geraete") or [])), kl[0] if kl else {})
             d = {"einrichten": True, "id": f"{k.get('id', 'tuer')}_0", "klingel": k.get("id", ""), "name": k.get("name", "Tür"),
-                 "webhook": self.webhook_url(), "ha": f"http://{self.basis()}", "geraet": g, "api": API}
+                 "webhook": self.webhook_url(), "ha": f"http://{self.basis()}", "geraet": g, "api": API,
+                 "geraet_schluessel": self.geraet_schluessel(g)}
             if ext:
                 d["extern"] = ext
                 d["webhook_extern"] = f"{ext}/api/webhook/{self.webhook_id}"
@@ -737,11 +760,20 @@ class Tuerklingel:
         antwort = lambda ok, text: web.json_response({"ok": ok, "text": text})  # noqa: E731
         if re.fullmatch(r"mobile_app_[a-z0-9_]+", geraet) and request.remote:
             self._ips[geraet] = str(request.remote)   # für erkennen(): Dashboard-Karte auf diesem Gerät
+        if aktion in ("hallo", "hausruf_start", "hausruf_ziele", "probeanruf") and not self.geraet_schluessel_ok(
+                geraet, str(j.get("geraet_schluessel") or "")):
+            # ohne laufenden Anruf: Geräte-Schlüssel aus der Einrichtung (EINRICHTEN) nötig; ältere Apps bekommen ihn
+            # mit der nächsten Einrichtung bzw. dem nächsten Anruf
+            return antwort(False, "Gerät nicht eingerichtet – bitte App aktualisieren")
         if aktion == "hallo":   # App hat die stille Einrichtung bekommen (oder startet neu) -> Gerät mit App
             if not self.erlaubt(geraet):
                 _LOGGER.info("DoorCall: %s hat die App, ist aber nicht freigegeben", geraet)
                 return antwort(False, "Gerät in DoorCall nicht freigegeben")
             if re.fullmatch(r"mobile_app_[a-z0-9_]+", geraet) and geraet in self.alle_handy_geraete():
+                ok = self.daten.setdefault("geraete_schluessel_bestaetigt", [])
+                if geraet not in ok:
+                    ok.append(geraet)
+                    self.speichern()
                 neu = geraet not in (self.daten.get("app_geraete") or [])
                 self._app_merken(geraet)
                 if neu:
@@ -764,17 +796,19 @@ class Tuerklingel:
             return antwort(*await self._probeanruf(str(j.get("klingel") or aid.rsplit("_", 1)[0]), geraet))
         x = self.anrufe.get(aid)
         k = self.klingel(x["kid"]) if x else None
+        if not x:
+            return antwort(False, "Anruf unbekannt")
+        # jede Rückmeldung zu einem Anruf braucht den Schlüssel, den nur dieses Gerät mit dem Anruf bekommen hat
+        schluessel_ok = secrets.compare_digest(x.get("schluessel", {}).get(geraet, "-"), str(j.get("schluessel") or ""))
+        if not schluessel_ok:
+            return antwort(False, "nicht erlaubt")
+        self._app_merken(geraet)
         if aktion != "status":   # Status fragt die App alle paar Sekunden ab - nicht ins Log/auf den Bus
             _LOGGER.info("Türklingel: %s von %s (Anruf %s, App %s)", aktion, geraet, aid, j.get("app") or "vor 4.3")
             hass.bus.async_fire(EREIGNIS, {"aktion": aktion, "geraet": geraet, "anruf": aid,
-                                                          "klingel": x["kid"] if x else "", "name": (k or {}).get("name", "")})
-        if not x:
-            return antwort(False, "Anruf unbekannt")
+                                           "klingel": x["kid"], "name": (k or {}).get("name", "")})
         x.setdefault("teil", {}); x.setdefault("frei", True); x.setdefault("sprecher", ""); x.setdefault("eingeladen", []); x.setdefault("ende", 0.0)
         x.setdefault("modus", "einer"); x.setdefault("gesperrt", []); x.setdefault("sprecher_set", [])
-        schluessel_ok = secrets.compare_digest(x.get("schluessel", {}).get(geraet, "-"), str(j.get("schluessel") or ""))
-        if schluessel_ok:
-            self._app_merken(geraet)
         jetzt = time.time()
         kt = k   # Tür, die gerade angeschaut wird (App schickt "tuer"): deren Schalter/Öffnen/Ansagen - nur wenn eingetragen
         if (tid := str(j.get("tuer") or "")) and x and tid != x.get("kid"):
@@ -1483,8 +1517,14 @@ def ansichten(hass: HomeAssistant) -> None:
     if hass.data.get(DOMAIN + "_ansichten"):
         return
     hass.data[DOMAIN + "_ansichten"] = True
-    for v in (SignalView, BildView, MikView, MixView, HausMikView, HausHoerView, AltSignalView, AltBildView, AltMikView):
+    for v in (SignalView, BildView, MikView, MixView, HausMikView, HausHoerView):
         hass.http.register_view(v(hass))
+    # alte /api/esphomeremote/…-Adressen nur nach einer Übernahme aus ESPHomeRemote und nur, wenn das nicht läuft
+    from . import esphomeremote_laeuft
+    t = hass.data.get(DOMAIN + "_tuerklingel")
+    if t is not None and t.daten.get("uebernommen") and not esphomeremote_laeuft(hass):
+        for v in (AltSignalView, AltBildView, AltMikView):
+            hass.http.register_view(v(hass))
 
 
 def _go2rtc_vorschlag(hass) -> str:

@@ -466,7 +466,8 @@ public final class Anruf {
         JSONObject l = letzter(c);
         final JSONObject j = new JSONObject();
         try {
-            j.put("tuerklingel", aktion).put("geraet", l.optString("geraet")).put("app", appVersion());
+            j.put("tuerklingel", aktion).put("geraet", l.optString("geraet")).put("app", appVersion())
+                    .put("geraet_schluessel", l.optString("geraet_schluessel"));   // DoorCall 2026-11-24: Pflicht
             if (zusatz != null) for (java.util.Iterator<String> it = zusatz.keys(); it.hasNext(); ) { String k = it.next(); j.put(k, zusatz.get(k)); }
         } catch (Exception ignored) {}
         new Thread(() -> {
@@ -750,6 +751,13 @@ public final class Anruf {
         JSONObject l = letzter(c);
         if (l.length() == 0 || !l.optString("webhook").equals(j.optString("webhook")) || !l.optString("geraet").equals(j.optString("geraet")))
             prefs(c).edit().putString("letzter", j.toString()).putLong("zeit", System.currentTimeMillis()).apply();
+        else if (!j.optString("geraet_schluessel").isEmpty() && !j.optString("geraet_schluessel").equals(l.optString("geraet_schluessel"))) {
+            try {   // Geräte-Schlüssel (DoorCall 2026-11-24) in die gespeicherten Daten übernehmen, Rest bleibt
+                l.put("geraet_schluessel", j.optString("geraet_schluessel"));
+                if (!j.optString("webhook_extern").isEmpty()) l.put("webhook_extern", j.optString("webhook_extern"));
+                prefs(c).edit().putString("letzter", l.toString()).apply();
+            } catch (Exception ignored) {}
+        }
         anHa(c, "hallo", null, r -> Log.i(TAG, "Einrichtung: " + (r == null ? "HA nicht erreichbar" : r.toString())));
     }
 
@@ -767,6 +775,7 @@ public final class Anruf {
         try {
             String id = l.optString("id");
             j.put("tuerklingel", "probeanruf").put("id", id).put("geraet", l.optString("geraet"))
+                    .put("geraet_schluessel", l.optString("geraet_schluessel"))
                     .put("klingel", l.optString("klingel", id.contains("_") ? id.substring(0, id.lastIndexOf('_')) : id));
         } catch (Exception ignored) {}
         new Thread(() -> {

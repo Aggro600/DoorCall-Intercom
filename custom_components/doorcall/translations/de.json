@@ -3,11 +3,20 @@
     "step": {
       "user": {
         "title": "DoorCall Intercom",
-        "description": "Klingeln an der Tür kommt als echter Anruf auf Handys und Tablets (App „Türklingel“). Nach der Einrichtung in der Seitenleiste „DoorCall“ öffnen und Klingeln, Geräte und Gruppen einstellen."
+        "description": "Klingeln an der Tür kommt als echter Anruf auf Handys und Tablets (App „Türklingel“). Nach der Einrichtung in der Seitenleiste „DoorCall“ öffnen und Klingeln, Geräte und Gruppen einstellen.",
+        "data": {
+          "uebernehmen": "Klingel-Anrufe aus ESPHomeRemote übernehmen"
+        },
+        "data_description": {
+          "uebernehmen": "Nur sichtbar, wenn es ältere Klingel-Einstellungen aus ESPHomeRemote gibt. ESPHomeRemote vorher entfernen oder deaktivieren."
+        }
       }
     },
     "abort": {
       "single_instance_allowed": "DoorCall Intercom ist schon eingerichtet."
+    },
+    "error": {
+      "esphomeremote_loaded": "ESPHomeRemote ist noch geladen – erst deaktivieren oder entfernen, oder DoorCall ohne Übernahme einrichten."
     }
   },
   "services": {

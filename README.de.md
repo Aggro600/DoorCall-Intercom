@@ -44,21 +44,24 @@ mit, werden dazugeholt oder ausgesperrt.
 
 - Home Assistant 2026.9 oder neuer.
 - Auf jedem Gerät: die **Home-Assistant-App** (sie weckt die Klingel-App) und die **App „Türklingel“**
-  (Android; derzeit im geschlossenen Test bei Google Play – Quellcode in [`app/`](app)).
+  (Android 10+). **APK aus dem [neuesten Release](https://github.com/Aggro600/DoorCall-Intercom/releases/latest) laden** (Datei `DoorCall-Tuerklingel-<Version>.apk`, auf
+  dem Handy installieren – einmal „Unbekannte Apps installieren“ erlauben). Google Play: geschlossener Test.
+  Quellcode: [`app/`](app).
 - go2rtc mit einem Stream der Klingelkamera. Gegensprechen braucht einen Rückkanal (z. B. RTSP/ONVIF-Backchannel;
   eine Reolink Video Doorbell nimmt PCMU an).
 
 ## Installation
 
-1. HACS → Integrationen → ⋮ → Benutzerdefinierte Repositories → `https://github.com/Aggro600/DoorCall-Intercom`,
-   Typ *Integration* → **DoorCall Intercom** installieren → Home Assistant neu starten.
+1. HACS → nach **DoorCall Intercom** suchen → herunterladen → Home Assistant neu starten.
+   (Noch nicht gelistet? HACS → ⋮ → Benutzerdefinierte Repositories → `https://github.com/Aggro600/DoorCall-Intercom`, Typ *Integration*.)
 2. Einstellungen → Geräte & Dienste → Integration hinzufügen → **DoorCall Intercom**.
-3. Die App „Türklingel“ auf den Handys/Tablets installieren und sie unter **DoorCall › Geräte für DoorCall** anhaken – sie richten sich dann von selbst ein (stiller Gruß, es klingelt nicht). Standard „Nur ausgewählte Geräte“: andere Handys werden nie angesprochen und auch mit App abgewiesen. Alternativ „Alle Geräte automatisch“ oder „Aus“.
+3. Die App „Türklingel“ ([APK aus dem neuesten Release](https://github.com/Aggro600/DoorCall-Intercom/releases/latest)) auf den Handys/Tablets installieren und sie unter **DoorCall › Geräte für DoorCall** anhaken – sie richten sich dann von selbst ein (stiller Gruß, es klingelt nicht). Standard „Nur ausgewählte Geräte“: andere Handys werden nie angesprochen und auch mit App abgewiesen. Alternativ „Alle Geräte automatisch“ oder „Aus“.
 4. In der Seitenleiste **DoorCall** öffnen: Klingel anlegen (Auslöser, Kamera), Geräte anhaken, go2rtc-Adresse und
    Stream eintragen, optional Türöffner, Schalter, Schnellantworten. **Probeanruf** drücken.
 
-Vorher mit ESPHomeRemote (bis 2026.11.20) genutzt? DoorCall übernimmt die Anruf-Einstellungen beim ersten Start
-automatisch (gleiche Webhook-Adresse – installierte Apps funktionieren weiter).
+Vorher mit ESPHomeRemote (bis 2026.11.20) genutzt? ESPHomeRemote erst deaktivieren oder entfernen; dann bietet die
+Einrichtung von DoorCall **„Klingel-Anrufe aus ESPHomeRemote übernehmen“** an (nur wenn alte Einstellungen da sind).
+Ohne dieses Häkchen wird nichts übernommen, und nie, solange ESPHomeRemote geladen ist.
 
 ## Für Automationen
 
@@ -67,8 +70,10 @@ Jede Aktion der App löst das Ereignis `doorcall_event` aus, mit `aktion` (z. B.
 
 ## Sicherheit
 
-- Die App spricht mit einem Webhook von Home Assistant; Schalten, Öffnen und Sprechen brauchen einen Schlüssel je
-  Anruf und Gerät.
+- Die App spricht mit einem Webhook von Home Assistant. **Jede** Meldung zu einem Anruf (annehmen, ablehnen, auflegen,
+  schalten, öffnen, sprechen …) braucht den Schlüssel, den das Gerät mit diesem Anruf bekommen hat. Meldungen ohne
+  Anruf (Hausruf starten, Probeanruf, „hallo“) brauchen einen Geräte-Schlüssel aus der stillen Einrichtung – Apps vor
+  7.6 bitte aktualisieren.
 - „Tür öffnen“ muss ausdrücklich freigegeben werden und geht nur während eines Anrufs (oder solange es klingelt)
   auf diesem Gerät.
 - go2rtc bleibt im Heimnetz; von unterwegs reicht HA nur das WebRTC-Angebot weiter.

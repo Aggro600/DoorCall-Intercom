@@ -20,7 +20,7 @@ import re
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError
 import homeassistant.helpers.config_validation as cv
@@ -68,8 +68,21 @@ def _alt_lesen(pfad: str) -> dict:
         return {}
 
 
+def esphomeremote_laeuft(hass: HomeAssistant) -> bool:
+    """ESPHomeRemote ist geladen - dann nichts von dort übernehmen (Webhook, alte Adressen)."""
+    return any(e.state is ConfigEntryState.LOADED for e in hass.config_entries.async_entries("esphomeremote"))
+
+
+def alt_vorhanden(pfad: str) -> bool:
+    return bool(_alt_lesen(pfad).get("klingel_webhook"))
+
+
 async def _uebernehmen(hass: HomeAssistant) -> dict:
-    """Einmalig: Klingel-Anrufe aus ESPHomeRemote (.storage/esphomeremote) übernehmen."""
+    """Nur auf Wunsch (Häkchen bei der Einrichtung): Klingel-Anrufe aus ESPHomeRemote (.storage/esphomeremote) übernehmen.
+    Nie, solange ESPHomeRemote geladen ist."""
+    if esphomeremote_laeuft(hass):
+        _LOGGER.warning("DoorCall: ESPHomeRemote ist geladen - keine Übernahme")
+        return {}
     alt = await hass.async_add_executor_job(_alt_lesen, hass.config.path(".storage", "esphomeremote"))
     if not alt.get("klingel_webhook"):
         return {}
@@ -129,7 +142,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     store = Store(hass, STORE_VERSION, DOMAIN)
     daten = await store.async_load() or {}
     if not daten:
-        daten = await _uebernehmen(hass)
+        daten = await _uebernehmen(hass) if entry.data.get("uebernehmen") else {}
         await store.async_save(daten)
     daten.setdefault("klingeln", [])
     daten.setdefault("gruppen", [])
@@ -170,6 +183,10 @@ def _einrichten_planen(hass: HomeAssistant, entry: ConfigEntry, t: Tuerklingel) 
 
     async def start(_now=None) -> None:
         await t.einrichten()
+        # bekannte Geräte, die ihren Geräte-Schlüssel noch nicht bestätigt haben (App vor 7.6): Einrichtung erneut
+        offen = [g for g in t.app_geraete() if g not in (t.daten.get("geraete_schluessel_bestaetigt") or [])]
+        if offen:
+            await t.einrichten(offen, alle=True)
 
     async def neue(_now=None) -> None:
         jetzt = set(t.alle_handy_geraete())

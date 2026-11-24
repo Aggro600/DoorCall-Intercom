@@ -43,21 +43,24 @@ be brought in or locked out.
 
 - Home Assistant 2026.9 or newer.
 - On every device: the **Home Assistant Companion app** (it wakes the doorbell app) and the **DoorCall app
-  "Türklingel"** (Android; currently in closed testing on Google Play – the source is in [`app/`](app)).
+  "Türklingel"** (Android 10+). **Download the APK from the [latest release](https://github.com/Aggro600/DoorCall-Intercom/releases/latest)** (file
+  `DoorCall-Tuerklingel-<version>.apk`, install it on the phone – allow "install unknown apps" once). A Google Play
+  listing is in closed testing. Source: [`app/`](app).
 - go2rtc with a stream of your doorbell camera. Two-way audio needs a backchannel (e.g. RTSP/ONVIF backchannel;
   a Reolink Video Doorbell accepts PCMU).
 
 ## Installation
 
-1. HACS → Integrations → ⋮ → Custom repositories → `https://github.com/Aggro600/DoorCall-Intercom`, type
-   *Integration* → install **DoorCall Intercom** → restart Home Assistant.
+1. HACS → search for **DoorCall Intercom** → download → restart Home Assistant.
+   (Not listed yet? HACS → ⋮ → Custom repositories → `https://github.com/Aggro600/DoorCall-Intercom`, type *Integration*.)
 2. Settings → Devices & services → Add integration → **DoorCall Intercom**.
-3. Install the app „Türklingel“ on the phones/tablets and tick them under **DoorCall › Devices for DoorCall** – they set themselves up (silent greeting, no ringing). Default „Only selected devices“: other phones are never contacted and are rejected even with the app. Alternatively „All devices automatically“ or „Off“.
+3. Install the app „Türklingel“ ([APK from the latest release](https://github.com/Aggro600/DoorCall-Intercom/releases/latest)) on the phones/tablets and tick them under **DoorCall › Devices for DoorCall** – they set themselves up (silent greeting, no ringing). Default „Only selected devices“: other phones are never contacted and are rejected even with the app. Alternatively „All devices automatically“ or „Off“.
 4. Open **DoorCall** in the sidebar: add a doorbell (trigger, camera), tick the devices, enter go2rtc address and
    stream, optionally door opener, switches, quick replies. Press **Test call**.
 
-Coming from ESPHomeRemote (≤ 2026.11.20)? DoorCall takes over the doorbell call settings automatically on first
-start (same webhook address – installed apps keep working).
+Coming from ESPHomeRemote (≤ 2026.11.20)? Disable or remove the ESPHomeRemote integration first; then the setup dialog
+of DoorCall offers **"Import the doorbell calls from ESPHomeRemote"** (only if old settings exist). Nothing is imported
+without that tick, and never while ESPHomeRemote is loaded.
 
 ## For automations
 
@@ -66,7 +69,10 @@ Every action of the app fires the event `doorcall_event` with `aktion` (e.g. `an
 
 ## Security
 
-- The app talks to a Home Assistant webhook; switching, opening and talking need a per-call, per-device key.
+- The app talks to a Home Assistant webhook. **Every** message about a call (answer, decline, hang up, switch, open,
+  talk …) needs the per-call, per-device key the device got with that call. Messages without a call (start an
+  intercom call, test call, "hello") need a per-device key handed out with the silent setup – apps older than 7.6
+  must be updated.
 - "Open door" must be enabled explicitly and only works during a call (or while it rings) on that device.
 - go2rtc stays inside your network; from outside, HA only forwards the WebRTC offer.
 

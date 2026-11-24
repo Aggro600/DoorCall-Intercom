@@ -3,11 +3,20 @@
     "step": {
       "user": {
         "title": "DoorCall Intercom",
-        "description": "Doorbell rings become real calls on phones and tablets (app \"Türklingel\"). After setup, open \"DoorCall\" in the sidebar to set up doorbells, devices and groups."
+        "description": "Doorbell rings become real calls on phones and tablets (app \"Türklingel\"). After setup, open \"DoorCall\" in the sidebar to set up doorbells, devices and groups.",
+        "data": {
+          "uebernehmen": "Import the doorbell calls from ESPHomeRemote"
+        },
+        "data_description": {
+          "uebernehmen": "Only shown if older ESPHomeRemote doorbell settings exist. Remove or disable the ESPHomeRemote integration first."
+        }
       }
     },
     "abort": {
       "single_instance_allowed": "DoorCall Intercom is already set up."
+    },
+    "error": {
+      "esphomeremote_loaded": "ESPHomeRemote is still loaded – disable or remove it first, or set up DoorCall without importing."
     }
   },
   "services": {
