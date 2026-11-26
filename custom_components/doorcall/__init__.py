@@ -32,7 +32,7 @@ from .core import DOMAIN, Tuerklingel, ansichten, validate_anruf, validate_grupp
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 IMPULS = ("button", "input_button", "event")   # Auslöser ohne "on": jede Änderung zählt
-VERSION_JS = "2026.11.23.1"
+VERSION_JS = "2026.11.26.1"
 
 
 def validate_klingeln(roh) -> list[dict]:
@@ -354,7 +354,8 @@ async def ws_ziele(hass, connection, msg) -> None:
 
 @websocket_api.websocket_command({vol.Required("type"): "doorcall/geraet_einst", vol.Required("einst"): {
     vol.Match(r"^mobile_app_[a-z0-9_]+$"): {vol.Optional("laut"): vol.Any(None, vol.All(int, vol.Range(min=-1, max=100))),
-                                          vol.Optional("fenster"): bool, vol.Optional("auto"): bool}}})
+                                          vol.Optional("fenster"): bool, vol.Optional("auto"): bool,
+                                          vol.Optional("zuhause"): vol.Any(None, vol.All(int, vol.Range(min=-1, max=100)))}}})
 @websocket_api.require_admin
 @websocket_api.async_response
 async def ws_geraet_einst(hass, connection, msg) -> None:

@@ -117,6 +117,8 @@ class DoorCallPanel extends HTMLElement {
         ${(fg.modus === "alle" ? geraete : (fg.geraete || [])).map((g) => { const e = (this.info.geraete_einst || {})[g] || {}; return `<div class="zeile"><span style="min-width:150px">${esc(this._gname(g))}</span>
           <label>Lautstärke <select data-ge="laut" data-g="${esc(g)}"><option value="" ${e.laut == null ? "selected" : ""}>wie Klingel</option><option value="0" ${e.laut === 0 ? "selected" : ""}>wie am Gerät</option><option value="-1" ${e.laut === -1 ? "selected" : ""}>lautlos</option>
             ${[30, 40, 50, 60, 70, 80, 90, 100].map((v) => `<option value="${v}" ${e.laut === v ? "selected" : ""}>${v} %</option>`).join("")}</select></label>
+          <label title="Gilt, solange die Home-Assistant-App das Gerät zu Hause meldet">Zu Hause <select data-ge="zuhause" data-g="${esc(g)}"><option value="" ${e.zuhause == null ? "selected" : ""}>wie Lautstärke</option><option value="-1" ${e.zuhause === -1 ? "selected" : ""}>lautlos</option><option value="0" ${e.zuhause === 0 ? "selected" : ""}>wie am Gerät</option>
+            ${[30, 50, 70, 100].map((v) => `<option value="${v}" ${e.zuhause === v ? "selected" : ""}>${v} %</option>`).join("")}</select></label>
           <label>Anzeige <select data-ge="fenster" data-g="${esc(g)}"><option value="" ${e.fenster ? "" : "selected"}>Popup</option><option value="1" ${e.fenster ? "selected" : ""}>Vollbild</option></select></label>
           <label><input type="checkbox" data-ge="auto" data-g="${esc(g)}" ${e.auto ? "checked" : ""}>Darf durchgestellt werden</label></div>`; }).join("")}
         <hr><div class="note">Ruhe-Zonen</div>
@@ -247,6 +249,7 @@ class DoorCallPanel extends HTMLElement {
     if (t.dataset.ge) {   // Einstellungen je Gerät (doorcall/geraet_einst)
       const e = this.info.geraete_einst ||= {}, g = t.dataset.g, x = (e[g] ||= {});
       if (t.dataset.ge === "laut") x.laut = t.value === "" ? null : Number(t.value);
+      else if (t.dataset.ge === "zuhause") x.zuhause = t.value === "" ? null : Number(t.value);
       else if (t.dataset.ge === "fenster") x.fenster = t.value === "1"; else x[t.dataset.ge] = t.checked;
       try { this.info.geraete_einst = (await this._hass.callWS({ type: "doorcall/geraet_einst", einst: e })).geraete_einst; this.msg = ""; this.msgErr = false; }
       catch (err) { this.msg = "Gerät: " + (err.message || err); this.msgErr = true; }

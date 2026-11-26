@@ -471,11 +471,20 @@ class Tuerklingel:
         Reihenfolge: Einstellung der Klingel für dieses Gerät, sonst die des Geräts, sonst die der Klingel."""
         pk = ((klingel or {}).get("pro_geraet") or {}).get(g) or {}
         v = pk["laut"] if "laut" in pk else self.geraet_einst(g).get("laut")
+        # Zu Hause (2026-11-26, Nutzer: "Handys stumm wie die Tablets, aber nur wenn zu Hause, sonst klingeln"):
+        # eigene Stufe, solange der device_tracker der Home-Assistant-App "home" meldet - nicht beim Hausruf "laut"
+        zh = self.geraet_einst(g).get("zuhause")
+        if zh is not None and "laut" not in pk and not erzwingen and self.zu_hause(g):
+            return int(zh)
         if v is None or v == "klingel":
             return int(klingel_laut or 0)
         if erzwingen and int(v) <= 0:   # Hausruf "laut": auch lautlose/normale Geräte laut
             return int(klingel_laut) if klingel_laut and int(klingel_laut) > 0 else 70
         return int(v)
+
+    def zu_hause(self, g: str) -> bool:
+        st = self.hass.states.get("device_tracker." + g.removeprefix("mobile_app_"))
+        return st is not None and st.state == "home"
 
     def fenster_fuer(self, g: str, klingel: dict | None = None) -> bool:
         """Vollbild (Klingelfenster sofort) oder Popup: Einstellung der Klingel für dieses Gerät, sonst die des Geräts."""

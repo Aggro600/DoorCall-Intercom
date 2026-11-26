@@ -45,6 +45,9 @@ Card **"Devices for DoorCall"**:
 **Per-device settings** (same card):
 - **Ring volume**: "as doorbell", "as on the device" (normal, silent stays silent), **"silent"** (only shown, no sound,
   no vibration) or a fixed value that is enforced – e.g. tablets silent, phones "as on the device".
+- **At home**: its own volume while the Home Assistant app reports the device **at home** – e.g. phones **silent** at
+  home (like the tablets), ringing normally when away. "as volume" = no exception. Intercom "loud" and a per-doorbell
+  override take precedence.
 - **Display**: **Popup** (notification with "Video ansehen") or **full screen** (live-video window right away).
 - Each doorbell can override **ringing** and **display** per device (e.g. kitchen tablet loud for the flat door, silent
   for the front door); empty = as set for the device.

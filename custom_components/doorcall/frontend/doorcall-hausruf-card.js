@@ -152,6 +152,9 @@ class DoorCallHausrufDialog extends HTMLElement {
 
   _geschlossen() {
     this._auf = false;
+    // ha-dialog (2026.11) setzt beim Schließen per X/Hintergrund/Zurück nur sein internes _open zurück, "open" bleibt true -
+    // ohne das hier würde das nächste open = true nichts ändern und das Fenster nicht mehr aufgehen.
+    if (this._echt && this._rahmen) this._rahmen.open = false;
     if (offen === this) offen = null;
     this.dispatchEvent(new CustomEvent("dialog-closed", { bubbles: true, composed: true, detail: { dialog: DIALOG } }));
   }
@@ -197,7 +200,10 @@ class DoorCallHausrufDialog extends HTMLElement {
   _oeffnen() {
     if (this._auf) return;
     this._auf = true;
-    if (this._echt) this._rahmen.open = true;
+    if (this._echt) {
+      if (this._rahmen.open) { this._rahmen.open = false; this._rahmen.updateComplete?.then(() => { if (this._auf) this._rahmen.open = true; }); }
+      else this._rahmen.open = true;
+    }
     else requestAnimationFrame(() => this._rahmen.classList.add("da"));
   }
 

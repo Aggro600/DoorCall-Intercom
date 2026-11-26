@@ -47,6 +47,9 @@ Karte **„Geräte für DoorCall“**:
 - **Lautstärke beim Klingeln**: „wie Klingel“, „wie am Gerät“ (normal, lautlos bleibt lautlos), **„lautlos“** (Anruf
   wird nur angezeigt, kein Ton, keine Vibration) oder ein fester Wert, der erzwungen wird – z. B. Tablets lautlos,
   Handys „wie am Gerät“.
+- **Zu Hause**: eigene Lautstärke, solange die Home-Assistant-App das Gerät **zu Hause** meldet – z. B. Handys zu Hause
+  **lautlos** (wie die Tablets), unterwegs klingeln sie normal. „wie Lautstärke“ = keine Ausnahme. Hausruf „Laut“ und
+  eine abweichende Einstellung bei der Klingel gehen vor.
 - **Anzeige**: **Popup** (Meldung oben mit „Video ansehen“) oder **Vollbild** (gleich das Fenster mit Live-Bild).
 - Bei jeder Klingel lassen sich **Klingeln** und **Anzeige** je Gerät noch abweichend einstellen (z. B. Küchen-Tablet bei
   der Wohnungstür laut, bei der Haustür lautlos); leer = wie beim Gerät.
